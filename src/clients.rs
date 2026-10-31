@@ -3,6 +3,7 @@ use crate::types::{ChatResponse, Message};
 #[derive(Debug, PartialEq, Eq)]// compares errors for equality
 pub(crate) enum ClientError {
     Unavailable,
+    EmptyInput,
 }
 
 pub(crate) trait ChatClient {

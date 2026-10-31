@@ -5,7 +5,6 @@ use crate::clients::ClientError;
 pub(crate) struct Agent<C: ChatClient> {
     client: C,
 }
-
 impl<C: ChatClient> Agent<C> {
     // Your constructor and run method go here.
     pub(crate) fn new(client: C) -> Self {
@@ -13,6 +12,9 @@ impl<C: ChatClient> Agent<C> {
     }
 
     pub(crate) fn run(&self, input: &str) -> Result<ChatResponse, ClientError> {
+        if input.trim().is_empty() {
+            return Err(ClientError::EmptyInput);
+        }
         let messages = vec![Message::new(
             "user".to_string(),
             vec![input.to_string()],

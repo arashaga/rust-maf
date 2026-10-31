@@ -40,3 +40,11 @@ fn agent_propagates_client_error() {
     let response = agent.run("Hi");
     assert!(matches!(response, Err(ClientError::Unavailable)));
 }
+
+#[test]
+fn agent_returns_empty_input_error() {
+    let client = FailingClient;
+    let agent = Agent::new(client);
+    let response = agent.run("   ");
+    assert!(matches!(response, Err(ClientError::EmptyInput)));
+}

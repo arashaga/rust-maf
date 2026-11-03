@@ -1,6 +1,7 @@
 use super::AgentSession;
 use crate::types::Message;
 
+
 #[test]
 fn new_session_has_empty_history() {
     let session = AgentSession::new();
@@ -22,3 +23,5 @@ fn session_can_replace_history() {
     assert_eq!(session.history()[0].role(), "user");
     assert_eq!(session.history()[0].text(), "Hi");
 }
+
+

@@ -200,3 +200,49 @@ fn failed_second_request_preserves_history(){
     assert_eq!(history[1].role(), "assistant");
     assert_eq!(history[1].text(), "Hello");
 }
+
+#[test]
+fn sessions_keep_their_own_history() {
+    let client = FakeChatClient::new("Hello from the agent".to_string());
+    let agent = Agent::new(client);
+    let mut session1 = AgentSession::new();
+    let mut session2 = AgentSession::new();
+    agent.run("Hi from A", &mut session1).expect("request should succeed");
+    agent.run("Hello from B", &mut session2).expect("request should succeed");
+    assert_eq!(session1.history()[0].text(), "Hi from A");
+    assert_eq!(session2.history()[0].text(), "Hello from B");
+    assert_eq!(session1.history().len(), 2);
+    assert_eq!(session2.history().len(), 2);
+}
+
+#[test]
+fn new_sessions_have_unique_ids() {
+    let session1 = AgentSession::new();
+    let session2 = AgentSession::new();
+    assert_ne!(session1.id(), session2.id());
+}
+
+#[test]
+fn replacing_history_preserves_session_id() {
+    let mut session = AgentSession::new();
+    let original_id = session.id().to_string();
+    session.replace_history(Vec::new());
+    assert_eq!(session.id(), original_id);
+}
+
+#[test]
+fn conversation_preserves_session_id() {
+    // 1. Create a FakeChatClient and an Agent.
+    // 2. Create a mutable AgentSession.
+    // 3. Save an owned copy of its ID.
+    // 4. Run the agent with "Hello".
+    // 5. Assert that the session ID is unchanged.
+    // 6. Assert that history now contains two messages.
+    let client = FakeChatClient::new("Hello from the agent".to_string());
+    let agent = Agent::new(client);
+    let mut session = AgentSession::new();
+    let original_id = session.id().to_string();
+    agent.run("Hello", &mut session).expect("request should succeed");
+    assert_eq!(session.id(), original_id);
+    assert_eq!(session.history().len(), 2);
+}

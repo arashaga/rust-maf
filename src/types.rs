@@ -1,6 +1,6 @@
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Message {
     // represnet a chat message
     role: String,
@@ -10,6 +10,7 @@ pub(crate) struct Message {
 
 
 }
+
 
 impl Message {
    pub(crate) fn new(role: String, contents: Vec<String>, author_name: Option<String>, message_id: Option<String>) -> Self {

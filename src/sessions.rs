@@ -27,6 +27,17 @@ impl AgentSession {
     pub fn id(&self) -> &str {
         &self.id
     }
+
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        // Serialize this session.
+        serde_json::to_string(self)
+    }
+
+    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        // Restore a session from JSON.
+        serde_json::from_str(json)
+    }
+
 }
 
 

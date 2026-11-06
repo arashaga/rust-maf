@@ -1,20 +1,22 @@
 use crate::types::{Message};
 use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 
-pub(crate) struct AgentSession {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSession {
     history: Vec<Message>,
     id: String,
 }
 
 impl AgentSession {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             history: Vec::new(),
             id: Uuid::new_v4().to_string(),
         }
     }
 
-    pub(crate) fn history(&self) -> &[Message] {
+    pub fn history(&self) -> &[Message] {
         &self.history
     }   
 
@@ -22,7 +24,7 @@ impl AgentSession {
         self.history = messages;
     }
 
-    pub(crate) fn id(&self) -> &str {
+    pub fn id(&self) -> &str {
         &self.id
     }
 }

@@ -1,16 +1,8 @@
-mod types;
-mod fake_client;
-mod clients;
-mod agent;
-mod sessions;
-use crate::agent::Agent;
-use crate::fake_client::FakeChatClient;
-use clients::ClientError;
-use crate::sessions::AgentSession;
+use maf_rust::{Agent, AgentSession, ClientError, FakeChatClient};
 
 fn main() {
     let client = FakeChatClient::new("Hello from your Rust agent!".to_string());
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let response = agent.run("Hello from user", &mut session);
     match response {

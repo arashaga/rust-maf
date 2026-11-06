@@ -1,11 +1,11 @@
 use crate::types::{ChatResponse, Message};
 
 #[derive(Debug, PartialEq, Eq)]// compares errors for equality
-pub(crate) enum ClientError {
+pub enum ClientError {
     Unavailable,
     EmptyInput,
 }
 
-pub(crate) trait ChatClient {
-    fn get_response(&self, messages: &[Message]) -> Result<ChatResponse, ClientError>;
+pub trait ChatClient {
+    fn get_response(&self, messages: &[Message], instructions: Option<&str>) -> Result<ChatResponse, ClientError>;
 }

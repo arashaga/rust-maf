@@ -1,18 +1,18 @@
 use crate::types::{ChatResponse, Message};
 use crate::clients::{ChatClient, ClientError};
 
-pub(crate) struct FakeChatClient {
+pub struct FakeChatClient {
     reply: String,
 }
 
 impl  FakeChatClient {
-    pub(crate) fn new(reply: String) -> Self {
+    pub fn new(reply: String) -> Self {
         Self { reply }
     }
 }
 
 impl ChatClient for FakeChatClient {
-        fn get_response(&self, _messages: &[Message]) -> Result<ChatResponse, ClientError> {
+        fn get_response(&self, _messages: &[Message], _instructions: Option<&str>) -> Result<ChatResponse, ClientError> {
         Ok(ChatResponse::new(vec![Message::new(
             "assistant".to_string(),
             vec![self.reply.clone()],
@@ -25,7 +25,7 @@ impl ChatClient for FakeChatClient {
 pub(crate)struct FailingClient;
 
 impl ChatClient for FailingClient {
-    fn get_response(&self, _messages: &[Message]) -> Result<ChatResponse, ClientError> {
+    fn get_response(&self, _messages: &[Message], _instructions: Option<&str>) -> Result<ChatResponse, ClientError> {
         Err(ClientError::Unavailable)
     }
 }

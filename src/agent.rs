@@ -5,19 +5,19 @@ use crate::types::{ChatResponse, Message};
 use crate::clients::ClientError;
 use crate::sessions::AgentSession;
 
-pub(crate) struct Agent<C: ChatClient> {
+pub struct Agent<C: ChatClient> {
     client: C,
-  
+    instructions: Option<String>,
 }
 impl<C: ChatClient> Agent<C> {
     // Your constructor and run method go here.
-    pub(crate) fn new(client: C) -> Self {
+    pub fn new(client: C, instructions: Option<String>) -> Self {
         Self { client,
-               
+               instructions,
         }
     }
 
-    pub(crate) fn run(&self, input: &str, session: &mut AgentSession) -> Result<ChatResponse, ClientError> {
+    pub fn run(&self, input: &str, session: &mut AgentSession) -> Result<ChatResponse, ClientError> {
         if input.trim().is_empty() {
             return Err(ClientError::EmptyInput);
         }
@@ -33,10 +33,10 @@ impl<C: ChatClient> Agent<C> {
         let mut pending_messages = session.history().to_vec();
         pending_messages.push(message);
         //sending the whole history / context to the get_response method of the client
-        let response = self.client.get_response(&pending_messages)?; // use ? doesn;t panic like expect()
+        let response = self.client.get_response(&pending_messages, self.instructions.as_deref())?; // use ? doesn;t panic like expect() also deref lets the client use you instruction without copying it
         pending_messages.extend(response.messages().iter().cloned());
         session.replace_history(pending_messages);
-        Ok(response) // the run function returns the chat response after updating the history
+        Ok(response) // the run function returns the not the chat response but envelope(OK) containing the response 
     }
 
 

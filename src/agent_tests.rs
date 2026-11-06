@@ -9,7 +9,7 @@ use crate::sessions::AgentSession;
 fn agent_returns_client_reply() {
     let reply = "Hello from agent".to_string();
     let client = FakeChatClient::new(reply.clone());
-    let  agent = Agent::new(client);
+    let  agent = Agent::new(client, None   );
     let mut session = AgentSession::new();
     let response = agent.run("Hello from user", &mut session).unwrap();
     assert_eq!(response.text(), reply);
@@ -18,7 +18,7 @@ fn agent_returns_client_reply() {
 struct CheckingClient;
 
 impl ChatClient for CheckingClient {
-    fn get_response(&self, messages: &[Message]) -> Result<ChatResponse, ClientError> {
+    fn get_response(&self, messages: &[Message], _instructions: Option<&str>) -> Result<ChatResponse, ClientError> {
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role(), "user");
         assert_eq!(messages[0].text(), "Hello from user");
@@ -30,7 +30,7 @@ impl ChatClient for CheckingClient {
 #[test]
 fn agent_sends_user_message() {
     let client = CheckingClient;
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let _response = agent.run("Hello from user", &mut session).unwrap();
 
@@ -40,7 +40,7 @@ fn agent_sends_user_message() {
 fn agent_propagates_client_error() {
     
     let client = FailingClient;
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let response = agent.run("Hi", &mut session);
     assert!(matches!(response, Err(ClientError::Unavailable)));
@@ -49,7 +49,7 @@ fn agent_propagates_client_error() {
 #[test]
 fn agent_returns_empty_input_error() {
     let client = FailingClient;
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let response = agent.run("   ", &mut session);
     assert!(matches!(response, Err(ClientError::EmptyInput)));
@@ -61,7 +61,7 @@ fn agent_returns_empty_input_error() {
 fn agent_remembers_conversation_history() {
     let reply = "Hello from agent".to_string();
     let client = FakeChatClient::new(reply.clone());
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let response1 = agent.run("Hello from user", &mut session).unwrap();
     assert_eq!(response1.text(), reply);
@@ -84,7 +84,7 @@ impl ConversationClient {
 }
 
 impl ChatClient for ConversationClient {
-        fn get_response(&self, messages: &[Message]) -> Result<ChatResponse, ClientError> {
+        fn get_response(&self, messages: &[Message], _instructions: Option<&str>) -> Result<ChatResponse, ClientError> {
         let call_number = self.calls.get() +1;
         self.calls.set(call_number);
         
@@ -122,7 +122,7 @@ Assert that the response text is "Hello"
 #[test]
 fn test_client_that_behaves_differently() {
     let client = ConversationClient::new();
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let response = agent.run("Hi", &mut session).expect("first request should succeed");
     let response2 = agent.run("How are you?", &mut session).expect("second request should succeed");
@@ -133,7 +133,7 @@ fn test_client_that_behaves_differently() {
 #[test]
 fn failed_request_does_not_change_history() {
     let client = FailingClient;
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let result = agent.run("Hi", &mut session);
     assert!(matches!(result, Err(ClientError::Unavailable)));
@@ -161,7 +161,7 @@ Second call: return Err(ClientError::Unavailable).
  */
 
 impl ChatClient for SucceedOnceClient {
-    fn get_response(&self, messages: &[Message]) -> Result<ChatResponse, ClientError> {
+    fn get_response(&self, messages: &[Message], _instructions: Option<&str>) -> Result<ChatResponse, ClientError> {
         let call_number = self.calls.get() + 1;
         self.calls.set(call_number);
 
@@ -184,7 +184,7 @@ impl ChatClient for SucceedOnceClient {
 #[test]
 fn failed_second_request_preserves_history(){
     let client = SucceedOnceClient::new();
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let response = agent.run("Hi", &mut session).expect("first request should succeed");
     assert_eq!(response.text(), "Hello");
@@ -204,7 +204,7 @@ fn failed_second_request_preserves_history(){
 #[test]
 fn sessions_keep_their_own_history() {
     let client = FakeChatClient::new("Hello from the agent".to_string());
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session1 = AgentSession::new();
     let mut session2 = AgentSession::new();
     agent.run("Hi from A", &mut session1).expect("request should succeed");
@@ -239,10 +239,66 @@ fn conversation_preserves_session_id() {
     // 5. Assert that the session ID is unchanged.
     // 6. Assert that history now contains two messages.
     let client = FakeChatClient::new("Hello from the agent".to_string());
-    let agent = Agent::new(client);
+    let agent = Agent::new(client, None);
     let mut session = AgentSession::new();
     let original_id = session.id().to_string();
     agent.run("Hello", &mut session).expect("request should succeed");
     assert_eq!(session.id(), original_id);
     assert_eq!(session.history().len(), 2);
+}
+
+
+struct InstructionsCheckingClient;
+
+impl ChatClient for InstructionsCheckingClient {
+    fn get_response(
+        &self,
+        messages: &[Message],
+        instructions: Option<&str>,
+    ) -> Result<ChatResponse, ClientError> {
+        // Check instructions equal Some("Explain simply").
+        // Check there is one user message containing "Hi".
+        assert_eq!(instructions, Some("Explain simply"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role(), "user");
+        assert_eq!(messages[0].text(), "Hi");
+        Ok(ChatResponse::new(vec![]))
+    }
+}
+
+#[test]
+fn agent_passes_instructions_to_client(){
+    let client = InstructionsCheckingClient;
+    let agent = Agent::new(client, Some("Explain simply".to_string()));
+    let mut session = AgentSession::new();
+    agent.run("Hi", &mut session).expect("request should succeed"); 
+    assert_eq!(session.history().len(), 1);
+    assert_eq!(session.history()[0].role(), "user");
+    assert_eq!(session.history()[0].text(), "Hi");
+
+}
+
+struct NoInstructionsClient;
+
+impl ChatClient for NoInstructionsClient {
+    fn get_response(
+        &self,
+        messages: &[Message],
+        instructions: Option<&str>,
+    ) -> Result<ChatResponse, ClientError> {
+        // Check instructions is None.
+        assert_eq!(instructions, None);
+        Ok(ChatResponse::new(vec![]))
+    }
+}
+
+#[test]
+fn agent_passes_none_when_instructions_are_absent(){
+    let client = NoInstructionsClient;
+    let agent = Agent::new(client, None);
+    let mut session = AgentSession::new();
+    agent.run("Hello", &mut session).expect("request should succeed");
+    assert_eq!(session.history().len(), 1);
+    assert_eq!(session.history()[0].role(), "user");
+    assert_eq!(session.history()[0].text(), "Hello");
 }

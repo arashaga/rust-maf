@@ -7,5 +7,5 @@ pub enum ClientError {
 }
 
 pub trait ChatClient {
-    fn get_response(&self, messages: &[Message], instructions: Option<&str>) -> Result<ChatResponse, ClientError>;
+    async fn get_response(&self, messages: &[Message], instructions: Option<&str>) -> Result<ChatResponse, ClientError>;
 }

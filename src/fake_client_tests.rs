@@ -5,38 +5,38 @@ use crate::clients::ClientError;
  use ? to propagate failure.
 */
 
-#[test]
-fn fake_client_returns_configured_reply() {
+#[tokio::test]
+async fn fake_client_returns_configured_reply() {
     let reply = "Hello from fake client".to_string();
     let client = FakeChatClient::new(reply.clone());
-    let response = client.get_response(&[], None).expect("fake client should return a response");
+    let response = client.get_response(&[], None).await.expect("fake client should return a response");
     assert_eq!(response.text(), reply);
     assert_eq!(response.messages().len(), 1);
     assert_eq!(response.messages()[0].role(), "assistant");
 }
 
-#[test]
-fn fake_client_can_reply_twice() {
+#[tokio::test]
+async fn fake_client_can_reply_twice() {
     let reply = "Hello again".to_string();
     let client = FakeChatClient::new(reply.clone());
-    let response1 = client.get_response(&[], None).expect("fake client should return a response");
-    let response2 = client.get_response(&[], None).expect("fake client should return a response");
+    let response1 = client.get_response(&[], None).await.expect("fake client should return a response");
+    let response2 = client.get_response(&[], None).await.expect("fake client should return a response");
     assert_eq!(response1.text(), reply);
     assert_eq!(response2.text(), reply);
 }
 
 
-fn ask_client<C: ChatClient>(client: &C) -> String {
+async fn ask_client<C: ChatClient>(client: &C) -> String {
     // Ask the client for a response, then return its text.
-    let response = client.get_response(&[], None).expect("fake client should return a response");
+    let response = client.get_response(&[], None).await.expect("fake client should return a response");
     response.text()
 }
 
-#[test]
-fn can_ask_client_through_trait() { 
+#[tokio::test]
+async fn can_ask_client_through_trait() { 
     let reply = "A predictable answer".to_string();
     let client = FakeChatClient::new(reply.clone());
-    let text = ask_client(&client);
+    let text = ask_client(&client).await;
     assert_eq!(text, reply);
 }
 

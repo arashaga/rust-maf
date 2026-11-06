@@ -8,8 +8,8 @@ agent
     .run("Hello", &mut session)
     .expect("conversation should succeed");
 */
-#[test]
-fn session_json_round_trip_json_preserves_messages() {
+#[tokio::test]
+async fn session_json_round_trip_json_preserves_messages() {
 
     let client = FakeChatClient::new("Hi".to_string());
     let agent = Agent::new(client, None);
@@ -17,7 +17,7 @@ fn session_json_round_trip_json_preserves_messages() {
 
     agent
         .run("Hello", &mut session)
-        .expect("conversation should succeed");
+        .await.expect("conversation should succeed");
    
     
     let json = session.to_json().expect("should serialize");
@@ -25,7 +25,7 @@ fn session_json_round_trip_json_preserves_messages() {
 
     agent
     .run("How are you?", &mut restored)
-    .expect("restored conversation should succeed");
+    .await.expect("restored conversation should succeed");
 
    
     assert_eq!(restored.history().len(), 4);

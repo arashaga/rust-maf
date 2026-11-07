@@ -65,3 +65,14 @@ async fn greeting_fails_when_client_is_unavailable() {
     let result = make_greeting(false).await;
     assert_eq!(result, Err("client not available"));
 }
+
+#[tokio::test]
+async fn passing_values_between_async_tasks() {
+
+    // a sender puts a value in a box and the receiver awaits it, one value one time
+    //After sending, that sender is consumed—you can’t use the same sender to send a second value.
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    sender.send("ready").expect("Failed to send");
+    let received = receiver.await.expect("Failed to receive");
+    assert_eq!(received, "ready");
+}

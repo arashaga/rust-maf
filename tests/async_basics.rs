@@ -42,3 +42,26 @@ async fn test_record_call() {
     pending.await;
     assert!(cell.get());  // True: the body has run.
     }
+
+    
+async fn make_greeting(available: bool) -> Result<String, &'static str> {
+   
+    let reply = get_checked_reply(available).await?;
+    Ok(format!("Agent says: {}", reply))
+}
+
+#[tokio::test]
+async fn greeting_succeeds_when_client_is_available() {
+    // Call make_greeting(true).await.
+    // Assert the result equals Ok("Agent says: hi".to_string()).
+    let result = make_greeting(true).await;
+    assert_eq!(result, Ok("Agent says: hi".to_string()));
+}
+
+#[tokio::test]
+async fn greeting_fails_when_client_is_unavailable() {
+    // Call make_greeting(false).await
+    // Assert the result equals Err("client not available")
+    let result = make_greeting(false).await;
+    assert_eq!(result, Err("client not available"));
+}

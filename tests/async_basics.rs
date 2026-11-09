@@ -76,3 +76,34 @@ async fn passing_values_between_async_tasks() {
     let received = receiver.await.expect("Failed to receive");
     assert_eq!(received, "ready");
 }
+
+#[tokio::test]
+async fn receiver_waits_for_a_value(){
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+
+    // create the futures you can write them in any order since they are just futures
+    let receive_work = async {
+        receiver.await.expect("sender should provide a value")
+    };
+
+    let send_work = async {
+
+        sender.send("model reply").expect("receiver should exist")
+    };
+
+    let (reply, ()) = tokio::join!(receive_work, send_work); //drives both futures together in the same task. () is there since you OK() and err()
+
+    assert_eq!(reply, "model reply")
+}
+
+#[tokio::test]
+
+async fn client_fails_before_producing_response(){
+    //using String Rust needs you to specify what type the channel would carry since the send never sends anything to infer the type
+    let ( sender, receiver) = tokio::sync::oneshot::channel::<String>();
+
+    drop(sender);
+    let received= receiver.await;
+
+     assert!(received.is_err());
+}

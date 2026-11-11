@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub enum Content {
     Text {
         text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        annotations: Option<Vec<Annotation>>,
     },
     FunctionCall {
         call_id: String,
@@ -29,13 +31,17 @@ pub enum Content {
 
 impl Content {
     pub fn from_text(text: String) -> Self {
-    Self::Text { text }
+    Self::Text {
+        text,
+        annotations: None,
+    }
 }
 
     pub fn text(&self) -> Option<&str> {
         match self {
             //text here is the vlue text of Text
-            Self::Text { text } => Some(text.as_str()), //“If this is Content::Text, borrow its text field and return it inside Some.”
+            //.. means ignore the annotations
+            Self::Text { text, .. } => Some(text.as_str()), //“If this is Content::Text, borrow its text field and return it inside Some.”
             Self::FunctionCall { .. } => None,//“If this is a function call, return no ordinary text.”
             //.. means we don’t need to inspect its fields 
             Self::FunctionResult { .. } => None,
@@ -70,6 +76,17 @@ impl Content {
             result: Some(serde_json::Value::String(result)),
             items: Some(items),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Annotation {
+    citation {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
     }
 }
 

@@ -6,18 +6,90 @@ computer can continue without access to earlier chats.
 
 ## Resume here
 
-- Last verified checkpoint: **4.4.4, session preservation**, followed by the
-  **4.4.5 regression and book checkpoint** on 11 November 2026.
+- Last verified checkpoint: **4.5, citation annotation subset**, completed
+  11 November 2026.
 - Section **4.4 is complete for the initial reasoning-text subset**, not the
   full Microsoft Agent Framework (MAF) reasoning-content contract.
-- Next lesson: **4.5.1 - inspect MAF's citation and annotation contract**.
-  Find the reference's `Annotation` definition and how annotations attach to
-  Content. Explain with a concrete cited text example before proposing a Rust
-  subset or providing one test. No citation implementation or test is added yet.
-- Latest `cargo test --quiet`: **78 passed**: 60 library, 8 public API,
-  8 async-practice, and 2 session integration tests.
+- Section **4.5 is complete for the deliberate Rust subset**: Citation
+  annotations have optional title and URL, are stored on Text content, and
+  survive Message and AgentSession JSON round trips. This is not full MAF
+  annotation parity; attachment to other content kinds and additional
+  annotation fields remain deferred.
+- Next lesson: **4.6.1 - inspect the Python reference for response metadata**.
+  Start by tracing what metadata the reference exposes and where it belongs
+  before designing the Rust subset or writing a test.
+- **4.5.1 contract inspection (11 November 2026):** inspected the current upstream
+  Python reference because the ignored local Python snapshot is absent.
+  `Annotation` is a `TypedDict` with optional citation fields; Content accepts
+  `annotations: Sequence[Annotation] | None` as a common field and stores it.
+  Annotations attach to a content item, not directly to the whole message and
+  not as a separate citation content variant. They describe sources without
+  replacing the answer text. This is a fresh upstream check, not proof of
+  parity with the unversioned snapshot used in earlier lessons.
+- **4.5.1 comprehension checked:** the learner correctly identified that
+  `Message::text()` returns only the answer and storing only that string loses
+  citations. Reading the text view itself does not delete stored annotations.
+- Initial planned Rust subset: a Serde-tagged `Annotation` enum with a Citation
+  variant and optional `title` and `url` strings, omitted when absent.
+  This is a deliberate subset of the Python fields, not full annotation parity;
+  other source fields, spans, coordinate spaces, and arbitrary metadata are
+  deferred. Annotation attachment to other content kinds is also deferred.
+- **4.5.2 implementation reviewed:** the learner added `Annotation::Citation`
+  with `Option<String>` title and URL fields and pasted
+  `citation_annotation_round_trips`. The targeted test compiles but fails during
+  deserialization: Serde expects an externally tagged, single-key enum object.
+  Next action: compare Annotation's enum attributes with Content's internal
+  `type` tag and snake_case naming, add the missing configuration, then rerun
+  `cargo test --lib citation_annotation_round_trips`.
+  The populated-citation test has not passed yet. Optional-field omission is
+  also not configured and needs a subsequent test. No production code or tests
+  were edited by the coach. Existing unrelated compiler warnings remain.
+- **4.5.2 follow-up review:** the learner added the correct Serde tag and
+  snake_case configuration, but placed it before the derive attribute.
+  The targeted command now fails compilation with `legacy_derive_helpers`.
+  Move derive above the Serde helper attribute. Restore the Rust variant name
+  from `citation` to `Citation`; `rename_all` supplies lowercase JSON naming.
+  Rerun the same test after these changes; no passing result is verified yet.
+- **4.5.2 verified (11 November 2026):** derive now precedes the Serde helper
+  attribute. `cargo test --lib citation` passes the populated-citation test
+  (1 passed, 60 filtered out). The variant is still lowercase `citation`;
+  rename it to `Citation` to follow Rust naming conventions. The existing
+  snake_case Serde configuration preserves `"type": "citation"`.
+  Next: paste the 4.5.3 absent-field round-trip test and configure omission
+  independently on title and URL. Expect an assertion mismatch because None
+  currently serializes as null. Section 4.5 remains in progress.
+- **4.5.3 verified (11 November 2026):** `cargo test --lib
+  citation_annotation` passes both the populated and absent-field round trips
+  (2 passed, 60 filtered out). Missing title and URL are omitted, while explicit
+  empty strings remain present. The Rust variant is still lowercase
+  `citation`; rename it to `Citation` as a small naming cleanup, preserving the
+  JSON tag via `rename_all`. Next, test attaching and round-tripping one
+  citation on Text content while confirming `Content::text()` still returns
+  only the answer text. Section 4.5 remains in progress.
+- **4.5.4 verified (11 November 2026):** `Content::Text` now stores optional
+  annotations, `from_text` initializes the field to None, and the text view
+  ignores metadata. `cargo test --lib
+  text_content_preserves_optional_citation_annotations` passes (1 passed, 62
+  filtered out): an annotated Text item round-trips, the text view is unchanged,
+  and older plain-Text JSON remains unchanged. Next, test the same guarantee
+  through Message serialization and its answer-text view.
+- **4.5.5 verified (11 November 2026):** `cargo test --lib
+  message_preserves_citation_without_adding_it_to_answer_text` passes (1 passed,
+  63 filtered out). A Message retains its citation in serialized contents, while
+  `Message::text()` returns only `"Rust source"`. Next, test preserving that
+  annotated message through AgentSession JSON save and restore.
+- **4.5.6 verified (11 November 2026):** after moving the test to
+  `src/sessions_test.rs`, `cargo test --lib
+  session_json_round_trip_preserves_citation_annotation` passes. It verifies
+  session identity, answer text, and exact citation JSON after save/restore.
+- **4.5 checkpoint (11 November 2026):** `cargo test --quiet` passes all
+  **83 tests**: 65 library, 8 public API, 8 async-practice, and 2 session
+  integration tests. Existing compiler warnings remain, including the lowercase
+  Rust variant name `citation`; tests are green despite those warnings.
 - Local book checkpoint: PDF rebuilt and validated at 108 pages; all 13
-  companion-example tests pass.
+  companion-example tests pass at the previous checkpoint. The ignored
+  `learning-book` directory is absent on this machine, so no PDF/book update
+  was possible for this checkpoint. The tracked journey is updated for resume.
 - Do not infer completion of later lessons from the roadmap below.
 
 ## Coaching agreement
@@ -26,8 +98,15 @@ The learner wants to become a stronger engineer by implementing the Rust
 framework, not receiving an unexplained finished solution.
 
 1. Label lessons with chapter and subsection numbers.
-2. Explain behavior first; show small, concrete examples and why a choice follows
-   the Python source. Do not make the novice choose compatibility requirements.
+2. Explain behavior first with concrete examples. Define Rust/Serde terms in
+   plain language before using shorthand (for example, explain that
+   `rename_all = "snake_case"` turns the Rust variant `Citation` into the JSON
+   tag `"citation"`). When a test fails, distinguish compiler errors from
+   assertion failures, explain the exact message and where it points, and state
+   a concrete next edit. Avoid vague phrases such as “metadata is not preserved”;
+   say exactly whether the JSON field is dropped or the `text()` view omits it.
+   Show why a compatibility choice follows the Python
+   source; do not make the novice choose compatibility requirements.
 3. Give **one complete test at a time in chat**. The learner copies and pastes
    it. Do not insert tests into files without an explicit request.
 4. The learner writes production code. Offer clear hints; provide an
@@ -60,6 +139,9 @@ framework, not receiving an unexplained finished solution.
 | 4.4.3 | A message keeps reasoning and answer items in order; its text view contains only the answer |
 | 4.4.4 | Session JSON preserves reasoning items, answer text, role, history length, and stable identity |
 | 4.4.5 | Full regression verification and learning-book/portable-progress checkpoint |
+| 4.5.1 | Inspected upstream annotation attachment and distinguished answer text from stored citation metadata |
+| 4.5.2-4.5.3 | Citation JSON representation, optional fields, and omitted-versus-empty behavior |
+| 4.5.4-4.5.6 | Store annotations on Text and preserve them through Message and AgentSession JSON round trips; complete for the deliberate subset |
 
 ## Current implementation contract
 
@@ -68,6 +150,10 @@ Read [the implementation](../src/types.rs) before extending it.
 - `Content` is a Serde-tagged enum using
   `#[serde(tag = "type", rename_all = "snake_case")]`.
 - `Text` stores `text: String`.
+- `Text` also stores optional `annotations: Vec<Annotation>`; absent annotations
+  are omitted from JSON. The implemented subset supports citations with optional
+  title and URL. Annotations remain stored but are not included in
+  `Content::text()` or `Message::text()`.
 - `FunctionCall` stores `call_id`, `name`, and optional JSON `arguments`.
   Absent arguments are omitted. Raw strings, including incomplete fragments,
   stay strings rather than being parsed automatically.

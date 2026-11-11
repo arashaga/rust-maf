@@ -140,6 +140,7 @@ fn response_with_trimming() {
 fn text_content_serializes_with_maf_type_tag() {
     let content = super::Content::Text {
         text: "Hello".to_string(),
+        annotations: None,
     };
 
     let json = serde_json::to_value(content)
@@ -236,6 +237,7 @@ fn function_call_without_arguments_round_trips() {
 fn content_text_returns_only_ordinary_test(){
         let text_content = super::Content::Text {
         text: "Hello".to_string(),
+        annotations: None,
     };
 
     let function_call = super::Content::FunctionCall {
@@ -336,8 +338,8 @@ fn message_text_preserves_text_around_function_result() {
         "Found three pages".to_string(),
         );
 
-        let before = super::Content::Text { text: "Before".to_string() };
-        let after = super::Content::Text { text: "After".to_string() };
+        let before = super::Content::Text { text: "Before".to_string(), annotations: None };
+        let after = super::Content::Text { text: "After".to_string(), annotations: None };
         let message = Message::from_contents("tool".to_string(), 
     vec![before,content, after], None, None);
 
@@ -526,6 +528,109 @@ fn message_text_skips_reasoning_but_preserves_content() {
             .expect("message should accept reasoning content");
 
     assert_eq!(message.text(), "Choose option A.");
+
+    let stored_contents = serde_json::to_value(message.contents())
+        .expect("message contents should serialize");
+
+    assert_eq!(stored_contents, original["contents"]);
+}
+
+//annotation test
+#[test]
+fn citation_annotation_round_trips() {
+    let json = serde_json::json!({
+        "type": "citation",
+        "title": "The Rust Programming Language",
+        "url": "https://doc.rust-lang.org/book/"
+    });
+
+    let annotation: super::Annotation =
+        serde_json::from_value(json.clone()).unwrap();
+
+    let restored = serde_json::to_value(&annotation).unwrap();
+
+    assert_eq!(restored, json);
+}
+
+#[test]
+fn citation_annotation_omits_absent_fields() {
+    for original in [
+        serde_json::json!({"type": "citation"}),
+        serde_json::json!({
+            "type": "citation",
+            "title": "Rust Book"
+        }),
+        serde_json::json!({
+            "type": "citation",
+            "url": "https://doc.rust-lang.org/book/"
+        }),
+        serde_json::json!({
+            "type": "citation",
+            "title": "",
+            "url": ""
+        }),
+    ] {
+        let annotation: super::Annotation =
+            serde_json::from_value(original.clone())
+                .expect("citation should deserialize");
+
+        let restored = serde_json::to_value(&annotation)
+            .expect("citation should serialize");
+
+        assert_eq!(restored, original);
+    }
+}
+
+#[test]
+fn text_content_preserves_optional_citation_annotations() {
+    for original in [
+        serde_json::json!({
+            "type": "text",
+            "text": "Rust source",
+            "annotations": [{
+                "type": "citation",
+                "title": "The Rust Programming Language",
+                "url": "https://doc.rust-lang.org/book/"
+            }]
+        }),
+        serde_json::json!({
+            "type": "text",
+            "text": "Plain text"
+        }),
+    ] {
+        let content: super::Content =
+            serde_json::from_value(original.clone())
+                .expect("text content should deserialize");
+
+        assert_eq!(content.text(), original["text"].as_str());
+
+        let restored = serde_json::to_value(&content)
+            .expect("text content should serialize");
+
+        assert_eq!(restored, original);
+    }
+}
+
+#[test]
+fn message_preserves_citation_without_adding_it_to_answer_text() {
+    let original = serde_json::json!({
+        "role": "assistant",
+        "contents": [{
+            "type": "text",
+            "text": "Rust source",
+            "annotations": [{
+                "type": "citation",
+                "title": "The Rust Programming Language",
+                "url": "https://doc.rust-lang.org/book/"
+            }]
+        }]
+    });
+
+    let message: super::Message =
+        serde_json::from_value(original.clone())
+            .expect("message should accept annotated text");
+
+    assert_eq!(message.text(), "Rust source");
 
     let stored_contents = serde_json::to_value(message.contents())
         .expect("message contents should serialize");

@@ -233,3 +233,39 @@ fn session_json_round_trip_preserves_reasoning_content() {
 
     assert_eq!(restored_contents, original["contents"]);
 }
+
+#[test]
+fn session_json_round_trip_preserves_citation_annotation() {
+    let original = json!({
+        "role": "assistant",
+        "contents": [{
+            "type": "text",
+            "text": "Rust source",
+            "annotations": [{
+                "type": "citation",
+                "title": "The Rust Programming Language",
+                "url": "https://doc.rust-lang.org/book/"
+            }]
+        }]
+    });
+
+    let message: Message = serde_json::from_value(original.clone())
+        .expect("annotated message should deserialize");
+
+    let mut session = AgentSession::new();
+    session.replace_history(vec![message]);
+
+    let saved = session.to_json()
+        .expect("session should serialize");
+    let restored = AgentSession::from_json(&saved)
+        .expect("session should deserialize");
+
+    assert_eq!(restored.id(), session.id());
+    assert_eq!(restored.history()[0].text(), "Rust source");
+
+    let restored_contents =
+        serde_json::to_value(restored.history()[0].contents())
+            .expect("restored contents should serialize");
+
+    assert_eq!(restored_contents, original["contents"]);
+}

@@ -8,4 +8,4 @@ pub use agent::Agent;
 pub use clients::{ChatClient, ClientError};
 pub use fake_client::FakeChatClient;
 pub use sessions::AgentSession;
-pub use types::{ChatResponse, Message};
+pub use types::{ChatResponse, Content,Message};

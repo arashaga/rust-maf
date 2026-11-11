@@ -1,4 +1,5 @@
 use super::Message;
+
 #[test]
 fn text_joins_multiple_contents() {
     // Arrange: construct a Message with "Hello" and "there".
@@ -133,4 +134,334 @@ fn response_with_trimming() {
 
     let combined_text = response.text();
     assert_eq!(combined_text, "Hello \n Hi");
+}
+
+#[test]
+fn text_content_serializes_with_maf_type_tag() {
+    let content = super::Content::Text {
+        text: "Hello".to_string(),
+    };
+
+    let json = serde_json::to_value(content)
+        .expect("content should serialize");
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "type": "text",
+            "text": "Hello"
+        })
+    );
+}
+
+#[test]
+fn functiona_call_omits_no_arguments(){
+    let content = super::Content::FunctionCall { 
+        call_id: "xzy".to_string(), 
+        name: "search".to_string(), 
+        arguments: None };
+
+    let json = serde_json::to_value(content)
+    .expect("content should be serialized");
+
+    assert_eq!(json,
+    serde_json::json!({
+        "type": "function_call", // comes from the tag and changes FunctionCall to snake case
+        "call_id": "xzy",
+        "name": "search"
+    }))
+}
+
+#[test]
+fn function_call_preserves_provided_arguments(){
+        let content = super::Content::FunctionCall { 
+        call_id: "xzy".to_string(), 
+        name: "search".to_string(), 
+        arguments: Some(serde_json::json!({
+            "query" : "Rust"
+        }))};
+
+    let json = serde_json::to_value(content)
+    .expect("content should be serialized");
+
+    assert_eq!(json,
+    serde_json::json!({
+        "type": "function_call", // comes from the tag and changes FunctionCall to snake case
+        "call_id": "xzy",
+        "name": "search",
+        "arguments" : {"query" : "Rust"}
+    }))
+}
+
+#[test]
+fn function_call_preserves_raw_string_arguments(){
+            let content = super::Content::FunctionCall { 
+        call_id: "xzy".to_string(), 
+        name: "search".to_string(), 
+        arguments: Some(serde_json::json!("{"))
+    };
+
+    let json = serde_json::to_value(content)
+    .expect("content should be serialized");
+
+    assert_eq!(json,
+    serde_json::json!({
+        "type": "function_call", // comes from the tag and changes FunctionCall to snake case
+        "call_id": "xzy",
+        "name": "search",
+        "arguments" : "{"
+    }))
+}
+
+#[test]
+fn function_call_without_arguments_round_trips() {
+    let original = serde_json::json!({
+        "type": "function_call",
+        "call_id": "xzy",
+        "name": "search"
+    });
+
+    // clone it so you can do the final comparsion since from_value take the ownerhship
+    let content: super::Content =
+        serde_json::from_value(original.clone())
+            .expect("function call should deserialize");
+
+    let restored_json = serde_json::to_value(content)
+        .expect("function call should serialize");
+
+    assert_eq!(restored_json, original);
+}
+
+#[test]
+fn content_text_returns_only_ordinary_test(){
+        let text_content = super::Content::Text {
+        text: "Hello".to_string(),
+    };
+
+    let function_call = super::Content::FunctionCall {
+        call_id: "c1".to_string(),
+        name: "search".to_string(),
+        arguments: None,
+    };
+
+    assert_eq!(text_content.text(), Some("Hello"));
+    assert_eq!(function_call.text(), None);
+}
+
+#[test]
+fn message_text_skips_function_calls() {
+    let json = serde_json::json!({
+        "role": "assistant",
+        "contents": [
+            {
+                "type": "text",
+                "text": "Checking now."
+            },
+            {
+                "type": "function_call",
+                "call_id": "c1",
+                "name": "search",
+                "arguments": {"query": "Rust"}
+            },
+            {
+                "type": "text",
+                "text": "Here is the result."
+            }
+        ]
+    });
+
+    let message: super::Message = serde_json::from_value(json)
+        .expect("message should accept structured content");
+
+    assert_eq!(
+        message.text(),
+        "Checking now. Here is the result."
+    );
+    assert_eq!(message.contents().len(), 3);
+}
+
+#[test]
+fn content_from_text_preserves_text() {
+    let content = super::Content::from_text("Hello".to_string());
+
+    assert_eq!(content.text(), Some("Hello"));
+}
+
+#[test]
+fn function_result_from_text_matches_maf_shape() {
+    let content = super::Content::from_function_result(
+        "c1".to_string(),
+        "Found three pages".to_string(),
+    );
+
+    let actual = serde_json::to_value(content)
+        .expect("function result should serialize");
+
+    let expected = serde_json::json!({
+        "type": "function_result",
+        "call_id": "c1",
+        "result": "Found three pages",
+        "items": [
+            {
+                "type": "text",
+                "text": "Found three pages"
+            }
+        ]
+    });
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn message_text_skips_function_results() {
+        let content = super::Content::from_function_result(
+        "c1".to_string(),
+        "Found three pages".to_string(),
+    );
+
+    let message = Message::from_contents("tool".to_string(), 
+    vec![content], None, None);
+
+
+    assert_eq!(message.text(), "");
+    assert_eq!(message.contents.len(),1);
+    assert_eq!(message.contents[0].text(),None);
+}
+
+
+#[test]
+fn message_text_preserves_text_around_function_result() {
+        let content = super::Content::from_function_result(
+        "c1".to_string(),
+        "Found three pages".to_string(),
+        );
+
+        let before = super::Content::Text { text: "Before".to_string() };
+        let after = super::Content::Text { text: "After".to_string() };
+        let message = Message::from_contents("tool".to_string(), 
+    vec![before,content, after], None, None);
+
+    assert_eq!(message.text(),"Before After");
+    assert_eq!(message.contents.len(),3);
+    assert_eq!(message.contents[1].text(),None);
+}
+
+#[test]
+fn function_result_from_items_preserves_order_and_joins_text_with_newlines() {
+    let content = super::Content::from_function_result_items(
+        "c1".to_string(),
+        vec![
+            super::Content::from_text("First page".to_string()),
+            super::Content::from_text("Second page".to_string()),
+        ],
+    );
+
+    let actual = serde_json::to_value(content)
+        .expect("function result should serialize");
+
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "type": "function_result",
+            "call_id": "c1",
+            "result": "First page\nSecond page",
+            "items": [
+                {"type": "text", "text": "First page"},
+                {"type": "text", "text": "Second page"}
+            ]
+        })
+    );
+}
+
+#[test]
+fn function_result_from_items_skips_empty_text_but_keeps_whitespace() {
+    let content = super::Content::from_function_result_items(
+        "c1".to_string(),
+        vec![
+            super::Content::from_text("First".to_string()),
+            super::Content::from_text(String::new()),
+            super::Content::from_text(" ".to_string()),
+            super::Content::from_text("Second".to_string()),
+        ],
+    );
+
+    let actual = serde_json::to_value(content)
+        .expect("function result should serialize");
+
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "type": "function_result",
+            "call_id": "c1",
+            "result": "First\n \nSecond",
+            "items": [
+                {"type": "text", "text": "First"},
+                {"type": "text", "text": ""},
+                {"type": "text", "text": " "},
+                {"type": "text", "text": "Second"}
+            ]
+        })
+    );
+}
+
+#[test]
+fn function_result_from_items_preserves_nested_result_without_flattening() {
+    let content = super::Content::from_function_result_items(
+        "c1".to_string(),
+        vec![
+            super::Content::from_text("Before".to_string()),
+            super::Content::from_function_result(
+                "c2".to_string(),
+                "Nested text".to_string(),
+            ),
+            super::Content::from_text("After".to_string()),
+        ],
+    );
+
+    let actual = serde_json::to_value(content)
+        .expect("function result should serialize");
+
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "type": "function_result",
+            "call_id": "c1",
+            "result": "Before\nAfter",
+            "items": [
+                {"type": "text", "text": "Before"},
+                {
+                    "type": "function_result",
+                    "call_id": "c2",
+                    "result": "Nested text",
+                    "items": [
+                        {"type": "text", "text": "Nested text"}
+                    ]
+                },
+                {"type": "text", "text": "After"}
+            ]
+        })
+    );
+}
+
+//Next, check an empty list. MAF preserves "items": [] and produces an empty summary—not null or a missing field.
+
+#[test]
+fn function_result_from_items_preserves_empty_list() {
+    let content = super::Content::from_function_result_items(
+        "c1".to_string(),
+        vec![],
+    );
+
+    let actual = serde_json::to_value(content)
+        .expect("empty function result should serialize");
+
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "type": "function_result",
+            "call_id": "c1",
+            "result": "",
+            "items": []
+        })
+    );
 }

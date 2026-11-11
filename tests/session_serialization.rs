@@ -30,11 +30,11 @@ async fn session_json_round_trip_json_preserves_messages() {
    
     assert_eq!(restored.history().len(), 4);
     assert_eq!(restored.history()[0].role(), "user");
-    assert_eq!(restored.history()[0].contents()[0], "Hello");
+    assert_eq!(restored.history()[0].contents()[0].text(), Some("Hello"));
     assert_eq!(restored.history()[1].role(), "assistant");
-    assert_eq!(restored.history()[1].contents()[0], "Hi");
+    assert_eq!(restored.history()[1].contents()[0].text(), Some("Hi"));
     assert_eq!(restored.history()[2].role(), "user");
-    assert_eq!(restored.history()[2].contents()[0], "How are you?");
+    assert_eq!(restored.history()[2].contents()[0].text(), Some("How are you?"));
     assert_eq!(restored.history()[3].role(), "assistant");
     assert_eq!(restored.history()[3].text(), "Hi");
     assert_eq!(session.history().len(), 2);

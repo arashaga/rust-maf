@@ -1,4 +1,4 @@
-use maf_rust::{Agent, AgentSession, FakeChatClient, ChatClient, ChatResponse, ClientError, Message};
+use maf_rust::{Agent, AgentSession, ChatClient, ChatResponse, ClientError, Content, FakeChatClient, Message};
 use std::cell::RefCell;
 use tokio::sync::oneshot;
 
@@ -182,4 +182,61 @@ async fn what_happens_on_a_second_call(){
     assert_eq!(session.history()[0].text(), "Hi");
     assert_eq!(session.history()[1].role(), "assistant");
     assert_eq!(session.history()[1].text(), "Hello");
+}
+
+#[test]
+fn public_api_preserves_mixed_message_content(){
+    let message = Message::from_contents(
+    "assistant".to_string(),
+    vec![Content::from_text("Checking now.".to_string()),
+    Content::FunctionCall { call_id: "c1".to_string(), name: "search".to_string(),
+     arguments: Some(serde_json::json!({"query": "Rust"})),
+    },
+    Content::from_text("Here is the result.".to_string()),
+    ],
+    None,
+    None,
+    );
+
+    assert_eq!(message.text(), "Checking now. Here is the result.");
+    assert_eq!(message.contents().len(), 3);
+
+    match &message.contents()[1] {
+        Content::FunctionCall { // this is destructuring 
+            call_id,
+            name,
+            arguments,
+        } => {
+            assert_eq!(call_id, "c1");
+            assert_eq!(name, "search");
+            assert_eq!( // remember This transforms a borrowed optional value into an option containing a borrowed value.
+                arguments.as_ref().expect("arguments should be retained")["query"],
+                "Rust"
+            );
+        }
+        _ => panic!("second content should be a function call"),
+    }
+}
+
+#[test]
+fn function_result_content_round_trips() {
+    let original = serde_json::json!({
+        "type": "function_result",
+        "call_id": "c1",
+        "result": "Found three pages",
+        "items": [
+            {
+                "type": "text",
+                "text": "Found three pages"
+            }
+        ]
+    });
+
+    let content: Content = serde_json::from_value(original.clone())
+        .expect("function result should deserialize");
+
+    let restored = serde_json::to_value(content)
+        .expect("function result should serialize");
+
+    assert_eq!(restored, original);
 }

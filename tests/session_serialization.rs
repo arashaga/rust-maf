@@ -48,3 +48,4 @@ fn session_with_malformed_json_should_fail() {
     let result = AgentSession::from_json(json);
     assert!(result.is_err());
 }
+

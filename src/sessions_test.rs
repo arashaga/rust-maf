@@ -193,3 +193,43 @@ fn session_json_round_trip_preserves_function_result() {
 
     assert_eq!(actual, expected);
 }
+
+//confirm that saving and restoring a whole session preserves the reasoning item—not just the displayed answer.
+#[test]
+fn session_json_round_trip_preserves_reasoning_content() {
+    let original = json!({
+        "role": "assistant",
+        "contents": [
+            {
+                "type": "text_reasoning",
+                "text": "Compared the available options."
+            },
+            {
+                "type": "text",
+                "text": "Choose option A."
+            }
+        ]
+    });
+
+    let message: Message = serde_json::from_value(original.clone())
+        .expect("message should deserialize");
+
+    let mut session = AgentSession::new();
+    session.replace_history(vec![message]);
+
+    let saved = session.to_json()
+        .expect("session should serialize");
+    let restored = AgentSession::from_json(&saved)
+        .expect("session should deserialize");
+
+    assert_eq!(restored.id(), session.id());
+    assert_eq!(restored.history().len(), 1);
+    assert_eq!(restored.history()[0].role(), "assistant");
+    assert_eq!(restored.history()[0].text(), "Choose option A.");
+
+    let restored_contents =
+        serde_json::to_value(restored.history()[0].contents())
+            .expect("restored contents should serialize");
+
+    assert_eq!(restored_contents, original["contents"]);
+}

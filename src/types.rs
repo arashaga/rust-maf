@@ -20,7 +20,11 @@ pub enum Content {
         #[serde(skip_serializing_if = "Option::is_none")]
         items: Option<Vec<Content>>
 
-    }
+    },
+    TextReasoning {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+    },
 }
 
 impl Content {
@@ -35,6 +39,7 @@ impl Content {
             Self::FunctionCall { .. } => None,//“If this is a function call, return no ordinary text.”
             //.. means we don’t need to inspect its fields 
             Self::FunctionResult { .. } => None,
+            Self::TextReasoning { ..} => None,
         }
         
     }

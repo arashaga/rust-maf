@@ -465,3 +465,71 @@ fn function_result_from_items_preserves_empty_list() {
         })
     );
 }
+
+//MAF has a content kind named text_reasoning, distinct from ordinary text. We’re preserving explicitly returned provider content—not obtaining private internal reasoning.
+#[test]
+fn text_reasoning_content_round_trips_without_becoming_answer_text() {
+    let original = serde_json::json!({
+        "type": "text_reasoning",
+        "text": "Compared the available options."
+    });
+
+    let content: super::Content =
+        serde_json::from_value(original.clone())
+            .expect("reasoning content should deserialize");
+
+    assert_eq!(content.text(), None);
+
+    let restored = serde_json::to_value(&content)
+        .expect("reasoning content should serialize");
+
+    assert_eq!(restored, original);
+}
+
+
+#[test]
+fn text_reasoning_content_preserves_absent_and_empty_text() {
+    for original in [
+        serde_json::json!({"type": "text_reasoning"}),
+        serde_json::json!({"type": "text_reasoning", "text": ""}),
+    ] {
+        let content: super::Content =
+            serde_json::from_value(original.clone())
+                .expect("reasoning content should deserialize");
+
+        let actual = serde_json::to_value(&content)
+            .expect("reasoning content should serialize");
+
+        assert_eq!(actual, original);
+    }
+}
+
+//verify that a message retains reasoning content without including it in its answer-text view.
+#[test]
+fn message_text_skips_reasoning_but_preserves_content() {
+    let original = serde_json::json!({
+        "role": "assistant",
+        "contents": [
+            {
+                "type": "text_reasoning",
+                "text": "Compared the available options."
+            },
+            {
+                "type": "text",
+                "text": "Choose option A."
+            }
+        ]
+    });
+
+    let message: super::Message =
+        serde_json::from_value(original.clone())
+            .expect("message should accept reasoning content");
+
+    assert_eq!(message.text(), "Choose option A.");
+
+    let stored_contents = serde_json::to_value(message.contents())
+        .expect("message contents should serialize");
+
+    assert_eq!(stored_contents, original["contents"]);
+}
+

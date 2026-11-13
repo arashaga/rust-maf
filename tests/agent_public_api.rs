@@ -240,3 +240,39 @@ fn function_result_content_round_trips() {
 
     assert_eq!(restored, original);
 }
+
+#[tokio::test]
+async fn agent_returns_response_id_from_client() {
+    struct ResponseIdClient;
+
+    impl ChatClient for ResponseIdClient {
+        async fn get_response(
+            &self,
+            _messages: &[Message],
+            _instructions: Option<&str>,
+        ) -> Result<ChatResponse, ClientError> {
+            let message = Message::new(
+                "assistant".to_string(),
+                vec!["Hello from client".to_string()],
+                None,
+                None,
+            );
+
+            let mut response = ChatResponse::new(vec![message]);
+            response.set_response_id(Some("resp-123".to_string()));
+            Ok(response)
+        }
+    }
+
+    let agent = Agent::new(ResponseIdClient, None);
+    let mut session = AgentSession::new();
+
+    let response = agent.run("Hi", &mut session)
+        .await
+        .expect("client should succeed");
+
+    assert_eq!(response.response_id(), Some("resp-123"));
+    assert_eq!(response.text(), "Hello from client");
+    assert_eq!(session.history().len(), 2);
+    assert_eq!(session.history()[1].text(), "Hello from client");
+}

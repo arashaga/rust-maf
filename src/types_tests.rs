@@ -638,3 +638,107 @@ fn message_preserves_citation_without_adding_it_to_answer_text() {
     assert_eq!(stored_contents, original["contents"]);
 }
 
+#[test]
+fn response_keeps_optional_id_without_changing_text() {
+    let message = Message::new(
+        "assistant".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    );
+
+    let mut response = super::ChatResponse::new(vec![message]);
+
+    assert_eq!(response.response_id(), None);
+
+    response.set_response_id(Some("resp-123".to_string()));
+    assert_eq!(response.response_id(), Some("resp-123"));
+    assert_eq!(response.text(), "Hello");
+
+    response.set_response_id(None);
+    assert_eq!(response.response_id(), None);
+}
+
+#[test]
+fn response_json_round_trip_preserves_response_id() {
+    let mut response = super::ChatResponse::new(vec![]);
+    response.set_response_id(Some("resp-123".to_string()));
+
+    let json = serde_json::to_value(&response)
+        .expect("response should serialize");
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "type": "chat_response",
+            "messages": [],
+            "response_id": "resp-123"
+        })
+    );
+
+    let restored: super::ChatResponse = serde_json::from_value(json)
+        .expect("response should deserialize");
+
+    assert_eq!(restored.response_id(), Some("resp-123"));
+    assert!(restored.messages().is_empty());
+}
+
+#[test]
+fn response_json_omits_absent_response_id() {
+    let response = super::ChatResponse::new(vec![]);
+
+    let json = serde_json::to_value(&response)
+        .expect("response should serialize");
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "type": "chat_response",
+            "messages": []
+        })
+    );
+
+    let restored: super::ChatResponse = serde_json::from_value(json)
+        .expect("response should deserialize");
+
+    assert_eq!(restored.response_id(), None);
+}
+
+#[test]
+fn response_json_rejects_mismatched_type() {
+    for json in [
+        serde_json::json!({"type": "chat_response", "messages": []}),
+        serde_json::json!({"messages": []}),
+    ] {
+        let result: Result<super::ChatResponse, _> =
+            serde_json::from_value(json);
+
+        assert!(result.is_ok(), "valid response JSON should deserialize");
+    }
+
+    let wrong_type = serde_json::json!({
+        "type": "message",
+        "messages": []
+    });
+
+    let result: Result<super::ChatResponse, _> = //Rust, infer the error type for me.
+        serde_json::from_value(wrong_type);
+
+    assert!(result.is_err(), "a message type is not a chat response");
+}
+
+#[test]
+fn response_json_accepts_null_and_empty_type() {
+    for (description, json) in [
+        ("null", serde_json::json!({"type": null, "messages": []})),// remember null is a valid JSON value. don;t pass None
+        ("empty", serde_json::json!({"type": "", "messages": []})),
+    ] {
+        let result: Result<super::ChatResponse, _> =
+            serde_json::from_value(json);
+
+        assert!(
+            result.is_ok(),
+            "{description} type should be accepted; got {result:?}"
+        );
+    }
+}

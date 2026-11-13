@@ -160,12 +160,28 @@ impl Message {
 
 }
 
+
+#[derive(Deserialize)]
+struct ChatResponseInput {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    messages: Vec<Message>,
+    response_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename = "chat_response", try_from = "ChatResponseInput")]
 pub struct ChatResponse {
     messages: Vec<Message>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_id: Option<String>,
 }
  impl ChatResponse {
     pub fn new(messages: Vec<Message>) -> Self {
-        Self { messages }
+        Self {
+            messages,
+            response_id: None,
+        }
     }
 
     pub fn text(&self)-> String {
@@ -174,11 +190,37 @@ pub struct ChatResponse {
     }
 
     pub fn messages(&self) -> &[Message] {
+
         // Borrow the stored messages.
         &self.messages
     }
+
+    pub fn response_id(&self) -> Option<&str> {
+        self.response_id.as_deref()
+    }
+
+    pub fn set_response_id(&mut self, response_id: Option<String>) {
+        self.response_id = response_id;
+    }
 }
 
+impl TryFrom<ChatResponseInput> for ChatResponse {
+    type Error = String; //The TryFrom trait requires you to specify which type represents a conversion failure.
+
+    fn try_from(input: ChatResponseInput) -> Result<Self, Self::Error> {
+        // shorthand for match input.kind { Some(kind) => ..., None => ... }
+        if let Some(kind) = input.kind { //If input.kind contains a value, extract that value and call it kind.
+            if kind != "chat_response" && !kind.is_empty() {
+                return Err(format!("expected type \"chat_response\", got \"{kind}\""));
+            } 
+        }
+
+        Ok(Self {
+            messages: input.messages,
+            response_id: input.response_id,
+        })
+    }
+}
 
 #[cfg(test)]
 #[path = "types_tests.rs"]

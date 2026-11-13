@@ -6,8 +6,9 @@ computer can continue without access to earlier chats.
 
 ## Resume here
 
-- Last verified checkpoint: **4.5, citation annotation subset**, completed
-  11 November 2026.
+- Last completed section: **4.6, optional response ID and response JSON
+  validation subset**, completed 13 November 2026. All **89 project tests**
+  pass. Section 4.7 has not started; no commit or push was performed by the coach.
 - Section **4.4 is complete for the initial reasoning-text subset**, not the
   full Microsoft Agent Framework (MAF) reasoning-content contract.
 - Section **4.5 is complete for the deliberate Rust subset**: Citation
@@ -15,9 +16,72 @@ computer can continue without access to earlier chats.
   survive Message and AgentSession JSON round trips. This is not full MAF
   annotation parity; attachment to other content kinds and additional
   annotation fields remain deferred.
-- Next lesson: **4.6.1 - inspect the Python reference for response metadata**.
-  Start by tracing what metadata the reference exposes and where it belongs
-  before designing the Rust subset or writing a test.
+- Next lesson: **4.7.1 - preserve a nonempty structured response**. Explain
+  why an empty-message JSON round trip does not verify preservation of nested
+  content. Provide one complete `response_json_round_trip_preserves_structured_messages`
+  test in chat for the learner to paste; do not insert it.
+- The next test should use a response with an ID and a message containing
+  reasoning text followed by cited ordinary text. Round-trip the whole
+  ChatResponse and check the response ID, message count, ordered serialized
+  contents, and answer-only text view. This verifies the existing Rust subset,
+  not full Python wire compatibility. No new production feature is prescribed.
+- **4.6 validation design verified:** Serde reads `ChatResponseInput`, then
+  invokes `TryFrom<ChatResponseInput>`. The conversion moves messages and
+  response_id into ChatResponse and returns a descriptive error for a nonempty
+  mismatched string. Missing, null, empty, and correct string tags are accepted.
+  The helper expects string-or-null tags; other Python truthiness cases are
+  outside this deliberate subset. The serialized type tag remains unchanged.
+- **4.6.1 reference inspection:** the available local Python `ChatResponse`
+  has response-level `response_id`, `conversation_id`, `model`, `created_at`,
+  `finish_reason`, `usage_details`, structured-output and continuation fields.
+  Its response ID is optional, while author and message IDs belong to Message.
+  Its text view joins message texts; metadata is not inserted into that text.
+  The local snapshot revision is not recorded, so do not claim full parity.
+- **4.6.2 verified:** `ChatResponse` stores `response_id: Option<String>`.
+  The existing constructor starts at None; `response_id(&self)` borrows it
+  as `Option<&str>`, and `set_response_id` can set or clear it. The learner's
+  test verifies both cases and an unchanged text view. `cargo test --lib
+  response --quiet` passed all 6 selected tests at this exercise. Response
+  serialization was added later in 4.6.4; sessions still store messages only.
+- **4.6.3 verified:** `cargo test --test agent_public_api
+  agent_returns_response_id_from_client --quiet` passes. A fake public
+  `ChatClient` returns an ID, `Agent::run` returns it with the answer, and the
+  session history contains the conversation messages. The test does not show
+  that a session persists the response ID; the current session stores messages.
+- **4.6.4 verified:** the learner derived Serialize and Deserialize for
+  ChatResponse and configured the emitted `type: "chat_response"` tag. The
+  new empty-message JSON round trip preserves a supplied response ID; `cargo
+  test --lib response --quiet` passes all 7 selected tests. This does not yet
+  prove nested-message JSON parity or that deserialization validates the type
+  tag; Python rejects a supplied nonempty mismatched type.
+- **4.6.5 verified:** `response_id` now has
+  `#[serde(skip_serializing_if = "Option::is_none")]`. The absent-ID JSON test
+  passes and restores None; `cargo test --lib response --quiet` passes all 8
+  selected tests. An independent scratch probe confirmed that the struct tag
+  emits the correct type but does not reject a wrong type during reading.
+- **4.6.6 verified (13 November 2026):** the learner implemented TryFrom and
+  the condition `kind != "chat_response" && !kind.is_empty()`. Both
+  `response_json_rejects_mismatched_type` and
+  `response_json_accepts_null_and_empty_type` pass. The learner asked why an
+  empty string passes: the condition controls rejection, so `true && false`
+  skips Err and reaches Ok. Missing and null tags become None; an empty string
+  becomes Some("") and needs the inner nonempty check.
+- **4.6.7 checkpoint (13 November 2026):** `cargo test response --quiet`
+  passes 10 library, 1 public API, and 1 async-practice test. The complete
+  `cargo test --quiet` suite passes **89 tests**: 70 library, 9 public API,
+  8 async-practice, and 2 session integration tests. Existing compiler warnings
+  remain. The local manuscript and outline include structured 4.6 coaching;
+  the rebuilt PDF validates at **116 pages, 91 bookmarks, and 189 links**.
+- **4.6 limits:** this completes only the initial response-ID/JSON subset.
+  Other response metadata remains deferred. Sessions store messages, not
+  response IDs. The response JSON tests so far use empty message lists; full
+  nested-response JSON compatibility is not established. Rust requires a
+  messages array while the Python constructor can default to an empty list.
+- **Response ID explanation:** it identifies a particular provider response,
+  unlike a session ID for the ongoing conversation or a message ID for one
+  message. It can help correlate a response with provider logs or supported
+  follow-up operations. IDs are optional; the Rust constructor does not
+  generate one, and their presence does not itself fetch or persist anything.
 - **4.5.1 contract inspection (11 November 2026):** inspected the current upstream
   Python reference because the ignored local Python snapshot is absent.
   `Annotation` is a `TypedDict` with optional citation fields; Content accepts
@@ -26,6 +90,8 @@ computer can continue without access to earlier chats.
   not as a separate citation content variant. They describe sources without
   replacing the answer text. This is a fresh upstream check, not proof of
   parity with the unversioned snapshot used in earlier lessons.
+- The 4.5 exercise entries below are chronological: earlier failing states are
+  historical, and later entries record their fixes and passing tests.
 - **4.5.1 comprehension checked:** the learner correctly identified that
   `Message::text()` returns only the answer and storing only that string loses
   citations. Reading the text view itself does not delete stored annotations.
@@ -86,10 +152,11 @@ computer can continue without access to earlier chats.
   **83 tests**: 65 library, 8 public API, 8 async-practice, and 2 session
   integration tests. Existing compiler warnings remain, including the lowercase
   Rust variant name `citation`; tests are green despite those warnings.
-- Local book checkpoint: PDF rebuilt and validated at 108 pages; all 13
-  companion-example tests pass at the previous checkpoint. The ignored
-  `learning-book` directory is absent on this machine, so no PDF/book update
-  was possible for this checkpoint. The tracked journey is updated for resume.
+- The ignored `learning-book` directory was absent on the machine used for the
+  4.5 checkpoint. On resuming on a PC where it is available, the 4.5 manuscript
+  and outline were updated; that PDF validated at 111 pages, and all 13
+  companion-example tests passed. The current 4.6 PDF is 116 pages and remains
+  ignored by Git; pushing this journey does not transfer the book.
 - Do not infer completion of later lessons from the roadmap below.
 
 ## Coaching agreement
@@ -176,6 +243,15 @@ Read [the implementation](../src/types.rs) before extending it.
 - `Message::contents()` borrows the structured items. `Message::text()` joins only
   direct Text items using **spaces**, without deleting non-text items.
 - `ChatResponse::text()` joins message text with newlines and trims outer whitespace.
+- `ChatResponse::new` initializes its optional response ID to None. Its public
+  getter borrows the ID; `set_response_id` accepts an optional owned ID. A
+  session currently stores messages, not the complete ChatResponse.
+- `ChatResponse` derives Serde serialization and emits the `chat_response`
+  type tag. Its supplied ID round-trips with an empty message list, and an
+  absent ID is omitted. A wrong nonempty string type is rejected; missing,
+  null, empty, and correct string tags are accepted through a private input
+  helper and TryFrom conversion. Full response/message JSON parity is not
+  implemented, and unknown fields are not generally preserved.
 - [AgentSession](../src/sessions.rs) preserves structured message history through
   `to_json` and `from_json`. Unit tests can populate it with `replace_history`;
   external callers use the public agent/session API.
@@ -251,9 +327,10 @@ a book update was performed on a machine without those files or prerequisites.
 
 ## Remaining roadmap and limits
 
-- **4.5:** citations and annotations; start by tracing the reference contract.
-- **4.6:** response metadata.
-- **4.7:** rich-content compatibility and serialization review.
+- **4.5:** initial citations and annotations subset complete.
+- **4.6:** initial response-ID and response-JSON validation subset complete.
+- **4.7:** next; begin with 4.7.1, a nonempty structured-response round trip,
+  then review rich-content compatibility and serialization gaps.
 - **5:** one real model provider and deterministic boundary tests.
 - **6:** structured outputs and metadata.
 - **7:** streaming.

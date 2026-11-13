@@ -6,9 +6,19 @@ computer can continue without access to earlier chats.
 
 ## Resume here
 
-- Last completed section: **4.6, optional response ID and response JSON
-  validation subset**, completed 13 November 2026. All **89 project tests**
-  pass. Section 4.7 has not started; no commit or push was performed by the coach.
+- Last completed section: **4.7, structured-response serialization and input
+  normalization**, completed 13 November 2026. All **93 project tests** pass.
+  **Chapter 4 is complete for the initial Rust subset**, not full Python
+  content, metadata, or JSON parity. The coach has not staged, committed, or
+  pushed changes.
+- Next lesson: **5.1.1 - choose a provider and trace its adapter**. Chapter 5
+  has not started, and no provider/API has been selected. Ask which service
+  the learner intends to use before selecting an SDK or adding dependencies.
+  This is a provider preference, not a choice of reference-defined behavior.
+- After that choice, inspect the matching local Python adapter and trace one
+  simple non-streaming request and response: instructions, messages, answer
+  text, response ID, and errors. Start read-only; no live calls or credentials
+  in chat are needed. Do not write the provider implementation for the learner.
 - Section **4.4 is complete for the initial reasoning-text subset**, not the
   full Microsoft Agent Framework (MAF) reasoning-content contract.
 - Section **4.5 is complete for the deliberate Rust subset**: Citation
@@ -16,15 +26,56 @@ computer can continue without access to earlier chats.
   survive Message and AgentSession JSON round trips. This is not full MAF
   annotation parity; attachment to other content kinds and additional
   annotation fields remain deferred.
-- Next lesson: **4.7.1 - preserve a nonempty structured response**. Explain
-  why an empty-message JSON round trip does not verify preservation of nested
-  content. Provide one complete `response_json_round_trip_preserves_structured_messages`
-  test in chat for the learner to paste; do not insert it.
-- The next test should use a response with an ID and a message containing
-  reasoning text followed by cited ordinary text. Round-trip the whole
-  ChatResponse and check the response ID, message count, ordered serialized
-  contents, and answer-only text view. This verifies the existing Rust subset,
-  not full Python wire compatibility. No new production feature is prescribed.
+- **4.7.1 verified (13 November 2026):** `cargo test --lib
+  response_json_round_trip_preserves_structured_messages --quiet` passes
+  (1 passed, 70 filtered out). A whole response round trip preserves its ID,
+  message count, ordered reasoning and cited-text contents, and answer-only
+  text view. This verifies the existing Rust subset, not full Python parity.
+- **4.7.2 verified (13 November 2026):** the learner added
+  `#[serde(default)]` to ChatResponseInput.messages. The test
+  `response_json_defaults_missing_messages` passes; `cargo test --lib
+  response --quiet` passes all 12 selected library tests.
+  The local Python ChatResponse constructor defaults messages to None and
+  normalizes it to an empty list; SerializationMixin.from_dict forwards the
+  supplied keyword arguments to that constructor. An omitted messages field
+  now produces an empty Rust response too. This covers omission, not null.
+- **4.7.3 verified (13 November 2026):** `cargo test --lib response --quiet`
+  passes all 13 selected library tests, including
+  `response_json_accepts_null_messages`. ChatResponseInput.messages is now
+  Option<Vec<Message>>, while ChatResponse.messages remains Vec<Message>.
+  TryFrom uses input.messages.unwrap_or_default(): Some yields its owned
+  vector, and None yields Vec's default empty vector. This is not a panic or
+  a catch for deserialization errors.
+- During 4.7.3, the learner initially changed the actual response field
+  instead of the helper, causing E0624/E0608 in older tests. They restored the
+  actual field, constructor, and getter rather than weakening those tests.
+  The null-messages test now verifies empty stored messages, the preserved
+  response ID, empty text, and serialization as an ordinary empty array.
+- **4.7.4 verified (13 November 2026):** `cargo test --lib response --quiet`
+  passes all 14 selected library tests, including
+  `response_json_rejects_invalid_messages`. It rejects a string, number,
+  Boolean, object, and an array containing a number. Missing/null normalization
+  does not hide these deserialization errors. This stricter typed-input rule
+  is a deliberate Rust subset, not a claim about Python rejecting every shape.
+- **4.7.5 compatibility review:** direct message text joins Text items with
+  spaces; response text joins message texts with newlines and trims outer
+  whitespace, as in the local reference. Other metadata and content fields
+  remain deferred; unknown properties are not generally retained.
+  Rust Message does not emit a message type tag and emits absent author_name
+  and message_id as null, unlike Python's default tagged, None-omitting
+  serialization. A Rust round trip is not complete Python/provider wire
+  compatibility. Future provider adapters must explicitly map supported data.
+- **4.7.6 checkpoint (13 November 2026):** `cargo test --quiet` passes
+  **93 tests**: 74 library, 9 public API, 8 async-practice, and 2 session
+  integration tests. Existing compiler warnings remain. The local manuscript
+  and outline include structured 4.7 coaching; the rebuilt PDF validates at
+  **121 pages, 92 bookmarks, and 191 links**. The scoped Git changes are
+  src/types.rs, src/types_tests.rs, and this journey; no coaching instructions
+  changed during this section. Git writes remain the learner's responsibility.
+- **Explanation requested:** the earlier null/empty-type test sets `type` to
+  null while messages is an ordinary empty array. The new test sets messages
+  to null while type is the correct string. Null in one JSON field does not
+  establish null handling in a different field.
 - **4.6 validation design verified:** Serde reads `ChatResponseInput`, then
   invokes `TryFrom<ChatResponseInput>`. The conversion moves messages and
   response_id into ChatResponse and returns a descriptive error for a nonempty
@@ -72,11 +123,13 @@ computer can continue without access to earlier chats.
   8 async-practice, and 2 session integration tests. Existing compiler warnings
   remain. The local manuscript and outline include structured 4.6 coaching;
   the rebuilt PDF validates at **116 pages, 91 bookmarks, and 189 links**.
-- **4.6 limits:** this completes only the initial response-ID/JSON subset.
+- **4.6 limits at that checkpoint:** this completed only the initial
+  response-ID/JSON subset.
   Other response metadata remains deferred. Sessions store messages, not
-  response IDs. The response JSON tests so far use empty message lists; full
-  nested-response JSON compatibility is not established. Rust requires a
-  messages array while the Python constructor can default to an empty list.
+  response IDs. Its response JSON tests used empty message lists, and Rust
+  still required a messages array. Section 4.7 subsequently verified a
+  nonempty structured response and added missing/null list normalization;
+  full nested-response JSON compatibility is still not established.
 - **Response ID explanation:** it identifies a particular provider response,
   unlike a session ID for the ongoing conversation or a message ID for one
   message. It can help correlate a response with provider logs or supported
@@ -155,7 +208,7 @@ computer can continue without access to earlier chats.
 - The ignored `learning-book` directory was absent on the machine used for the
   4.5 checkpoint. On resuming on a PC where it is available, the 4.5 manuscript
   and outline were updated; that PDF validated at 111 pages, and all 13
-  companion-example tests passed. The current 4.6 PDF is 116 pages and remains
+  companion-example tests passed. The current 4.7 PDF is 121 pages and remains
   ignored by Git; pushing this journey does not transfer the book.
 - Do not infer completion of later lessons from the roadmap below.
 
@@ -247,10 +300,13 @@ Read [the implementation](../src/types.rs) before extending it.
   getter borrows the ID; `set_response_id` accepts an optional owned ID. A
   session currently stores messages, not the complete ChatResponse.
 - `ChatResponse` derives Serde serialization and emits the `chat_response`
-  type tag. Its supplied ID round-trips with an empty message list, and an
-  absent ID is omitted. A wrong nonempty string type is rejected; missing,
-  null, empty, and correct string tags are accepted through a private input
-  helper and TryFrom conversion. Full response/message JSON parity is not
+  type tag. Its supplied ID round-trips with an empty list and with a message
+  containing reasoning and cited text; an absent ID is omitted. A wrong
+  nonempty string type is rejected; missing, null, empty, and correct string
+  tags are accepted through a private input helper and TryFrom conversion.
+  Omitted and explicit-null messages normalize to an empty vector through
+  optional helper input and unwrap_or_default. Invalid message types must
+  still fail deserialization. Full response/message JSON parity is not
   implemented, and unknown fields are not generally preserved.
 - [AgentSession](../src/sessions.rs) preserves structured message history through
   `to_json` and `from_json`. Unit tests can populate it with `replace_history`;
@@ -329,9 +385,10 @@ a book update was performed on a machine without those files or prerequisites.
 
 - **4.5:** initial citations and annotations subset complete.
 - **4.6:** initial response-ID and response-JSON validation subset complete.
-- **4.7:** next; begin with 4.7.1, a nonempty structured-response round trip,
-  then review rich-content compatibility and serialization gaps.
-- **5:** one real model provider and deterministic boundary tests.
+- **4.7:** complete for the initial structured-response and normalized-input
+  subset; remaining compatibility boundaries are documented above.
+- **5:** next; begin with 5.1.1's provider choice and read-only adapter trace,
+  then one real model provider and deterministic boundary tests.
 - **6:** structured outputs and metadata.
 - **7:** streaming.
 

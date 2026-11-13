@@ -742,3 +742,112 @@ fn response_json_accepts_null_and_empty_type() {
         );
     }
 }
+
+#[test]
+fn response_json_round_trip_preserves_structured_messages() {
+    let expected_contents = serde_json::json!([
+        {
+            "type": "text_reasoning",
+            "text": "Checking the source."
+        },
+        {
+            "type": "text",
+            "text": "Rust source",
+            "annotations": [{
+                "type": "citation",
+                "title": "The Rust Programming Language",
+                "url": "https://doc.rust-lang.org/book/"
+            }]
+        }
+    ]);
+
+    let contents: Vec<super::Content> =
+        serde_json::from_value(expected_contents.clone())
+            .expect("content should deserialize");
+
+    let message = super::Message::from_contents(
+        "assistant".to_string(),
+        contents,
+        None,
+        None,
+    );
+
+    let mut response = super::ChatResponse::new(vec![message]);
+    response.set_response_id(Some("resp-rich-123".to_string()));
+
+    let json = serde_json::to_value(&response)
+        .expect("response should serialize");
+
+    let restored: super::ChatResponse = serde_json::from_value(json)
+        .expect("response should deserialize");
+
+    assert_eq!(restored.response_id(), Some("resp-rich-123"));
+    assert_eq!(restored.messages().len(), 1);
+    assert_eq!(restored.text(), "Rust source");
+
+    let restored_contents =
+        serde_json::to_value(restored.messages()[0].contents())
+            .expect("restored contents should serialize");
+
+    assert_eq!(restored_contents, expected_contents);
+}
+
+#[test]
+fn response_json_defaults_missing_messages() {
+    let json = serde_json::json!({
+        "type": "chat_response",
+        "response_id": "resp-empty-123"
+    });
+
+    let response: super::ChatResponse = serde_json::from_value(json)
+        .expect("omitted messages should default to an empty list");
+
+    assert!(response.messages().is_empty());
+    assert_eq!(response.text(), "");
+    assert_eq!(response.response_id(), Some("resp-empty-123"));
+}
+
+#[test]
+fn response_json_accepts_null_messages() {
+    let json = serde_json::json!({
+        "type": "chat_response",
+        "messages": null,
+        "response_id": "resp-null-123"
+    });
+
+    let response: super::ChatResponse = serde_json::from_value(json)
+        .expect("null messages should become an empty list");
+
+    assert!(response.messages().is_empty());
+    assert_eq!(response.text(), "");
+    assert_eq!(response.response_id(), Some("resp-null-123"));
+
+    let serialized = serde_json::to_value(&response)
+        .expect("response should serialize");
+
+    assert_eq!(serialized["messages"], serde_json::json!([]));
+}
+
+#[test]
+fn response_json_rejects_invalid_messages() {
+    for invalid_messages in [
+        serde_json::json!("not a list"),
+        serde_json::json!(42),
+        serde_json::json!(false),
+        serde_json::json!({}),
+        serde_json::json!([42]),
+    ] {
+        let json = serde_json::json!({
+            "type": "chat_response",
+            "messages": invalid_messages.clone()
+        });
+
+        let result: Result<super::ChatResponse, _> =
+            serde_json::from_value(json);
+
+        assert!(
+            result.is_err(),
+            "invalid messages should be rejected: {invalid_messages}"
+        );
+    }
+}

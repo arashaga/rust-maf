@@ -160,12 +160,12 @@ impl Message {
 
 }
 
-
 #[derive(Deserialize)]
 struct ChatResponseInput {
     #[serde(rename = "type")]
     kind: Option<String>,
-    messages: Vec<Message>,
+    #[serde(default)]
+    messages: Option<Vec<Message>>,
     response_id: Option<String>,
 }
 
@@ -186,7 +186,7 @@ pub struct ChatResponse {
 
     pub fn text(&self)-> String {
         // execute the text fn from message struct and collect it into a vectos and infer the type<_>
-        self.messages.iter().map(|m| m.text()).collect::<Vec<_>>().join("\n").trim().to_string()
+        self.messages().iter().map(|m| m.text()).collect::<Vec<_>>().join("\n").trim().to_string()
     }
 
     pub fn messages(&self) -> &[Message] {
@@ -216,7 +216,8 @@ impl TryFrom<ChatResponseInput> for ChatResponse {
         }
 
         Ok(Self {
-            messages: input.messages,
+            //unwrap(), this does not panic on None
+            messages: input.messages.unwrap_or_default(),//“If there is a list inside Some, give me that list. Otherwise, give me an empty list.”
             response_id: input.response_id,
         })
     }

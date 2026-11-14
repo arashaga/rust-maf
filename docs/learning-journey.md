@@ -6,19 +6,111 @@ computer can continue without access to earlier chats.
 
 ## Resume here
 
-- Last completed section: **4.7, structured-response serialization and input
-  normalization**, completed 13 November 2026. All **93 project tests** pass.
+- Last completed section: **5.1, Azure OpenAI Responses trace and initial
+  contract**, completed 13 November 2026. All **93 existing project tests** pass.
   **Chapter 4 is complete for the initial Rust subset**, not full Python
   content, metadata, or JSON parity. The coach has not staged, committed, or
   pushed changes.
-- Next lesson: **5.1.1 - choose a provider and trace its adapter**. Chapter 5
-  has not started, and no provider/API has been selected. Ask which service
-  the learner intends to use before selecting an SDK or adding dependencies.
-  This is a provider preference, not a choice of reference-defined behavior.
-- After that choice, inspect the matching local Python adapter and trace one
-  simple non-streaming request and response: instructions, messages, answer
-  text, response ID, and errors. Start read-only; no live calls or credentials
-  in chat are needed. Do not write the provider implementation for the learner.
+- Section 5.1 was read-only source inspection and contract planning, not
+  provider implementation. Chapter 5 is still in progress. No Rust provider
+  code, tests, dependencies, Azure resources, credentials, or live calls were
+  added. The learner selected Azure OpenAI.
+- **5.2.1 verified (13 November 2026):** `cargo test --test
+  azure_openai_config` passes the single config_rejects_empty_deployment test.
+  The learner created `src/azure_openai.rs` with AzureOpenAIConfig owning
+  private endpoint/deployment strings and AzureOpenAIConfigError with
+  EmptyDeployment. Its public constructor returns the typed error when
+  deployment.is_empty(), otherwise moves both strings into the configuration.
+  Both types are publicly re-exported from src/lib.rs. Compiler warnings
+  remain, including unread configuration fields at this stage.
+- **5.2.2 verified (13 November 2026):** `cargo test --test
+  azure_openai_config` passes both configuration tests. The learner added
+  public endpoint(&self) -> &str and deployment(&self) -> &str getters while
+  keeping both owned strings private. config_preserves_valid_settings checks
+  that successful construction retains the supplied endpoint and deployment
+  exactly. The getters borrow the strings without cloning or consuming the
+  configuration. The unread-configuration-fields warning is now gone;
+  unrelated existing warnings remain.
+- **Current exercise: 5.2.3 - reject an empty endpoint offline.** Supply the
+  complete config_rejects_empty_endpoint test in chat for the learner to
+  append to `tests/azure_openai_config.rs`. Pass String::new() as endpoint
+  and learning-deployment as the nonempty deployment. Expect the new
+  AzureOpenAIConfigError::EmptyEndpoint variant. The learner should add that
+  variant and an endpoint emptiness guard before successful construction.
+- The Python Azure settings path in `python/packages/openai/agent_framework_openai/_shared.py`
+  requires endpoint or base_url when there is no supplied client, and supports
+  environment-based settings. This Rust configuration deliberately has only
+  explicit endpoint/deployment, with no alternate base URL or supplied-client
+  fallback. Rejecting an empty endpoint is a local subset rule, not a claim
+  of full Python settings parity. Whitespace handling and full URL validation
+  are not established by this exercise.
+- Next run `cargo test --test azure_openai_config` after the learner pastes
+  the test and adds the guard. This third test has not yet been executed.
+  No production code or tests were inserted by the coach. Section 5.2 is not
+  complete; its regression/book/Git checkpoint is still pending. No
+  credentials, environment reads, SDK, HTTP calls, or dependency changes
+  are needed.
+- The local `python/packages/openai/README.md` recommends the Responses API
+  client OpenAIChatClient for new work; that same class supports Azure routing.
+  Use this Azure-configured Responses path for the first read-only walkthrough,
+  not assumed older Azure-specific class names or Chat Completions schemas.
+  No Rust SDK, authentication method, deployment, or API version is selected.
+- **5.1.1 reference inspection:** in
+  `python/packages/openai/agent_framework_openai/_chat_client.py`,
+  `_prepare_options` assembles input and model, `_prepare_message_for_openai`
+  maps the framework message, and `_prepare_content_for_openai` maps ordinary
+  user text to input_text (assistant history uses output_text). The
+  non-streaming `_inner_get_response` path awaits
+  client.responses.with_raw_response.create(stream=False, **run_options) for
+  a simple request. `_parse_response_from_openai` turns output_text into
+  framework Text, creates assistant messages, and copies response.id into
+  response_id. `_handle_request_error` raises a service exception rather than
+  returning an empty success.
+- Azure configuration is resolved by load_openai_service_settings in the
+  sibling `_shared.py`; the Responses constructor passes responses_mode=True.
+  Model means the Azure deployment name on this route. The source has richer
+  options and behaviors than the simplified first text-only example.
+- **5.1.2 reference inspection:** Agent stores configured instructions in
+  default_options in `python/packages/core/agent_framework/_agents.py` and
+  passes chat_options separately from session_messages to client.get_response.
+  BaseChatClient forwards those options. The Responses `_prepare_options`
+  retains non-None instructions as a top-level request option; it does not
+  synthesize a system message for them.
+- `test_instructions_passed_natively_not_as_system_message` in
+  `python/packages/openai/tests/openai/test_openai_chat_client.py` explicitly
+  checks this native field and the absence of an injected system message,
+  including continuation cases. This was source inspection, not a Python
+  test run or live call.
+- The Rust Agent already passes instructions separately to ChatClient, so no
+  agent change is needed for this boundary. In the future request mapper,
+  None means omit instructions; a supplied empty string is not None and the
+  reference retains it. Do not copy the type-tag empty-string rule here.
+  User text maps to input_text; replayed assistant text maps to output_text.
+- **5.1.3 planned initial contract (not implemented):** Azure Responses,
+  non-streaming, explicit endpoint/deployment, ordered user/assistant messages
+  with ordinary unannotated Text, and top-level optional instructions.
+  Preserve exact text, supported message/content order, and supplied response
+  and output-message IDs. Require nonempty prepared request input, as in the
+  reference; this is different from allowing empty response messages.
+- User text maps to input_text. Replayed assistant text maps to output_text
+  with annotations: [] when unannotated, verified in
+  `_annotations_to_output_text` and `_prepare_content_for_openai`.
+  Completed ordinary text outputs become framework assistant Text messages.
+  A valid response with no output items becomes one empty assistant message
+  in the reference; this must not be used as recovery for a failed request.
+- The first Rust provider subset will reject unsupported content/roles and
+  nonempty annotations explicitly rather than silently dropping Chapter 4
+  data. Tools, reasoning replay, citations/media, streaming, provider-managed
+  continuation, and broader metadata are deferred. The full Python adapter
+  supports much more. SDK choice, authentication, API-version handling, and
+  storage policy remain undecided before live use.
+- **5.1 checkpoint (13 November 2026):** `cargo test --quiet` still passes
+  **93 tests**: 74 library, 9 public API, 8 async-practice, and 2 session
+  integration tests. Existing compiler warnings remain. The local manuscript
+  and outline include structured 5.1 coaching; the rebuilt PDF validates at
+  **126 pages, 94 bookmarks, and 195 links**. The only tracked change for
+  this section is this journey; no coaching instructions changed. Provide
+  scoped review/add/commit/push commands and leave Git writes to the learner.
 - Section **4.4 is complete for the initial reasoning-text subset**, not the
   full Microsoft Agent Framework (MAF) reasoning-content contract.
 - Section **4.5 is complete for the deliberate Rust subset**: Citation
@@ -208,7 +300,7 @@ computer can continue without access to earlier chats.
 - The ignored `learning-book` directory was absent on the machine used for the
   4.5 checkpoint. On resuming on a PC where it is available, the 4.5 manuscript
   and outline were updated; that PDF validated at 111 pages, and all 13
-  companion-example tests passed. The current 4.7 PDF is 121 pages and remains
+  companion-example tests passed. The current 5.1 PDF is 126 pages and remains
   ignored by Git; pushing this journey does not transfer the book.
 - Do not infer completion of later lessons from the roadmap below.
 
@@ -387,8 +479,11 @@ a book update was performed on a machine without those files or prerequisites.
 - **4.6:** initial response-ID and response-JSON validation subset complete.
 - **4.7:** complete for the initial structured-response and normalized-input
   subset; remaining compatibility boundaries are documented above.
-- **5:** next; begin with 5.1.1's provider choice and read-only adapter trace,
-  then one real model provider and deterministic boundary tests.
+- **5:** in progress; Azure OpenAI selected, with the local reference's
+  Responses client traced in completed section 5.1. Section 5.2.1's first
+  offline configuration test has been supplied but not verified. Continue
+  with learner-authored configuration, then provider mapping, transport, and
+  deterministic boundary tests. No Rust provider implementation exists yet.
 - **6:** structured outputs and metadata.
 - **7:** streaming.
 

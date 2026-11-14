@@ -3,9 +3,10 @@ mod clients;
 mod fake_client;
 mod agent;
 mod sessions;
-
+mod azure_openai;
 pub use agent::Agent;
 pub use clients::{ChatClient, ClientError};
 pub use fake_client::FakeChatClient;
 pub use sessions::AgentSession;
 pub use types::{ChatResponse, Content,Message};
+pub use azure_openai::{AzureOpenAIConfig, AzureOpenAIConfigError};

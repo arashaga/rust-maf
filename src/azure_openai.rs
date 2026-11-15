@@ -1,4 +1,7 @@
-use crate::types::{Message, Content};
+use std::env::var_os;
+
+use crate::{ChatResponse, types::{Content, Message}};
+use serde_json::{json, Value};
 
 pub struct AzureOpenAIConfig {
     endpoint: String,
@@ -38,11 +41,7 @@ impl AzureOpenAIConfig {
         &self.deployment
     }
 
-    /*Next step: in azure_openai.rs, import Content alongside Message. Inside the loop, use match to recognize Content::Text and borrow its text field. Put that field—not the entire content item—into the JSON.
-
-For other content variants, return a meaningful request-building error rather than skipping them. You’ll need your own error enum for that: serde_json::Error describes JSON errors, not unsupported content. Your error type needs Debug so the test’s .expect(...) can display it.
-
-*/
+ /**/
     pub fn build_request_body(
         &self,
         messages: &[Message],
@@ -52,8 +51,21 @@ For other content variants, return a meaningful request-building error rather th
         // Step 1: Create an empty vector for JSON messages
         let mut input: Vec<serde_json::Value> = Vec::new();
 
+        if messages.is_empty(){
+            return Err(AzureOpenAIRequestError::EmptyInput);
+        }
         // Step 2: Loop through each Message
         for message in messages {
+            let role = message.role();
+
+            if role != "user" && role != "assistant" {
+                return Err(AzureOpenAIRequestError::UnsupportedRole);
+            }
+
+            if message.contents().is_empty(){
+                continue;
+            }
+
 
             // Create an empty vector for message content
             let mut content: Vec<serde_json::Value> = Vec::new();
@@ -66,10 +78,17 @@ For other content variants, return a meaningful request-building error rather th
                             return Err(AzureOpenAIRequestError::AnnotatedText);
                         }
 
-                        let text_json = serde_json::json!({
+                        let text_json = if role == "user" {serde_json::json!({
                             "type": "input_text",
                             "text": text
-                        });
+                        })
+                    } else {
+                        serde_json::json!({
+                            "type": "output_text",
+                            "text": text,
+                            "annotations": [], 
+                        })
+                    };
                         content.push(text_json);
                     }
                     _ => return Err(AzureOpenAIRequestError::UnsupportedContent),
@@ -78,6 +97,7 @@ For other content variants, return a meaningful request-building error rather th
 
             // Step 4: Create JSON for the entire message
             let message_json = serde_json::json!({
+                "type": "message",
                 "role": message.role(),
                 "content": content
             });
@@ -86,16 +106,102 @@ For other content variants, return a meaningful request-building error rather th
             input.push(message_json);
         }
 
+        if input.is_empty(){
+                return Err(AzureOpenAIRequestError::EmptyInput);
+            }
         // Step 5: Build the final request body
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.deployment,
             "input": input
         });
+
+        //If instructions contains a string, extract it into a variable called text. Otherwise, skip the block.
+        /*
+        match instructions {
+            Some(text) => {
+                request_body["instructions"] = serde_json::json!(text);
+            },
+            None => {
+                // Do nothing
+            },
+    }
+         */
+        if let Some(instruction) = instructions{
+            request_body["instructions"] = serde_json::json!(instruction)
+        }
 
         // Step 6: Return success
         Ok(request_body)
     }
 
+    pub fn parse_response(&self,response : &Value) -> Result<ChatResponse, String>{
+
+        let mut messages: Vec<Message> = Vec::new();
+        // let mut contents: Vec<Content> = Vec::new();
+
+        let response_id = response.get("id").and_then(|value| value.as_str()).ok_or("Missing response id")?.to_string();
+        let output_value = response
+            .get("output")
+            .ok_or("Missing output".to_string())?;
+
+        let response_array = output_value
+            .as_array()
+            .ok_or("Output must be an array".to_string())?;
+
+
+        for item in response_array{
+            let item_type = item
+                .get("type")
+                .and_then(|value| value.as_str())
+                .ok_or("Missing or invalid output type")?;
+            if item_type != "message"{
+                return Err("Unsuported output type".to_string());
+            }
+            // and then gets the Option value out
+            let message_id = item.get("id").and_then(|value| value.as_str()).ok_or("missing or invalid message id")?.to_string();
+            let message_role = item.get("role").and_then(|value| value.as_str()).ok_or("missing or invalid message role")?.to_string();
+            if message_role != "assistant"{
+                return Err("response provider role must be assistant!".to_string());
+            }
+            let content_array = item.get("content").and_then(|value| value.as_array()).ok_or("content missing")?;
+
+
+
+            let mut contents: Vec<String> = Vec::new();
+
+            for content in content_array{
+                if content["type"] != "output_text"{
+                    return Err("Unsuported output type".to_string());
+                }
+
+                let text = content.get("text").and_then(|value|value.as_str()).ok_or("content missing")?.to_string();
+                let annotations = content.get("annotations")
+                    .and_then(|value| value
+                    .as_array())
+                    .ok_or("Annotation doesn;t exist")?;
+
+                if !annotations.is_empty(){
+                    return Err("Unsupported annotations!".to_string());
+                }
+                contents.push(text);
+
+            }
+            let message = Message::new(message_role, contents, None, Some(message_id));
+            messages.push(message);
+
+
+
+
+        }
+
+        if messages.is_empty(){
+                messages.push(Message::new("assistant".to_string(), vec![], None, None));
+            }
+        let mut chat_response = ChatResponse::new(messages);
+        chat_response.set_response_id(Some(response_id));
+        Ok(chat_response)
+
+    }
 }
 /*You can add a descriptive variant to your AzureOpenAIRequestError enum for that case. Then rerun the test. The existing test only checks unannotated text, so we’ll need a separate test for the rejection afterward.*/
 #[derive(Debug)]
@@ -103,6 +209,8 @@ pub enum AzureOpenAIRequestError {
     Json(serde_json::Error),
     UnsupportedContent,
     AnnotatedText,
+    UnsupportedRole,
+    EmptyInput,
 }
 
 impl From<serde_json::Error> for AzureOpenAIRequestError {
@@ -110,3 +218,4 @@ impl From<serde_json::Error> for AzureOpenAIRequestError {
         Self::Json(error)
     }
 }
+

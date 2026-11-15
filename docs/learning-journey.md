@@ -6,15 +6,22 @@ computer can continue without access to earlier chats.
 
 ## Resume here
 
-- Last completed section: **5.2, offline Azure OpenAI configuration**, completed
-  14 November 2026. The full suite passes **96 tests**.
-  **Chapter 4 is complete for the initial Rust subset**, not full Python
-  content, metadata, or JSON parity. The coach has not staged, committed, or
-  pushed changes.
-- Section 5.1 was read-only source inspection and contract planning, not
-  provider implementation. Chapter 5 is still in progress. No request mapper,
-  transport, SDK/dependency, Azure resource, credential, or live call has been
-  added. The learner selected Azure OpenAI.
+- Last completed section: **5.3, offline request/response mapping for the
+  initial text-only subset**, completed 15 November 2026. `cargo test --quiet`
+  passes **118 tests**: 74 library, 9 public API, 8 async-practice, 3 Azure
+  config, 22 request/response, and 2 session integration tests.
+- **Resume at 5.4.1:** prevent a provider response with status `failed` from
+  becoming an apparently successful empty assistant message. The current
+  parser uses `Result<ChatResponse, String>` and ignores status; no transport
+  exists yet. The earlier exercises and class/data map are recorded below and
+  in `docs/rust-maf-map.md`.
+- **Chapter 4 status:** complete for the initial Rust subset, not full Python
+  content, metadata, or JSON parity. No changes have been staged, committed,
+  or pushed by the coach.
+- Section 5.1 was read-only source inspection and contract planning. Since
+  then, the learner has added explicit configuration and offline request and
+  response mappers. Chapter 5 is still in progress; there is no transport,
+  provider SDK, Azure resource, credential, or live call.
 - **5.2.1 verified (13 November 2026):** `cargo test --test
   azure_openai_config` passes the single config_rejects_empty_deployment test.
   The learner created `src/azure_openai.rs` with AzureOpenAIConfig owning
@@ -41,15 +48,19 @@ computer can continue without access to earlier chats.
   environment-based settings. This Rust configuration deliberately has only
   explicit endpoint/deployment, with no alternate base URL or supplied-client
   fallback. Rejecting an empty endpoint is a local subset rule, not a claim
-  of full Python settings parity. Whitespace handling and full URL validation
-  are not established by this exercise.
+  of full Python settings parity. `_resolve_named_setting` selects a nonempty
+  deployment string without trimming; that does not prove Azure will accept
+  the name. The Rust constructor checks only empty strings, not whitespace or
+  full URL validity.
 - **5.2 regression checkpoint (14 November 2026):** `cargo test --quiet` passes
   all **96 tests**: 74 library, 9 public API, 8 async-practice, 3 Azure config,
   and 2 session integration tests. Existing compiler warnings remain. The
-  ignored local `learning-book` directory is absent, so no PDF update was
-  possible. No credentials, environment reads, SDK, HTTP calls, or dependency
-  changes were needed.
-- **Current exercise: 5.3.1 - map one user Text message to Responses input.**
+  ignored local `learning-book` directory was absent on the other computer,
+  so no PDF update was possible there. A later update through 5.3.1 on this
+  computer validated at 128 pages, 96 bookmarks, and 199 links. No
+  credentials, environment reads, SDK, HTTP calls, or dependency changes
+  were needed.
+- **5.3.1 - map one user Text message to Responses input.**
   The learner pasted the offline test in `tests/azure_openai_request.rs`.
   It asserts that the configured deployment becomes the top-level
   `model`, and `"Hello"` becomes one `input` message with role `"user"` and
@@ -62,18 +73,196 @@ computer can continue without access to earlier chats.
   annotations with `AnnotatedText`, accepts None or an empty list, and puts
   the borrowed text in the JSON. `cargo test --test azure_openai_request
   request_body_maps_user_text_to_responses_input` passes (1 passed), but it
-  covers only unannotated user text; annotation handling is not yet tested.
+  covers only unannotated user text.
   The new error has an unused JSON-error conversion, which can be revisited
   rather than adding speculative error paths. A `Content::Text` is internal
   framework data; `input_text` is an Azure Responses JSON label emitted by
   the mapper, not a Rust Content variant.
-- **Next exercise: 5.3.2 - test citation rejection explicitly.** Provide one
-  complete test in chat and let the learner paste it. The request error must be
-  publicly reachable for a typed assertion; reject nonempty annotations and
-  preserve empty-list behavior. Do not silently discard unsupported
-  roles/content or instructions; the draft currently does not validate roles
-  or use instructions, so these still need exercises. Section 5.3 remains in
-  progress; do not treat the passing happy-path test as full mapper validation.
+- **5.3.1 reverified (14 November 2026):** after pulling commit 349abde,
+  `cargo test --test azure_openai_request --test azure_openai_config` passes
+  one request-mapping test and three configuration tests. This is a focused
+  run, not a new full-suite result. The learner's pre-pull journey notes remain
+  safely in the Git stash; relevant facts were reconciled here without
+  applying or dropping that stash.
+- **5.3.2 verified (14 November 2026):** `cargo test --test
+  azure_openai_request` passes both request tests, including
+  request_body_rejects_text_with_citation. The learner re-exported Annotation
+  and AzureOpenAIRequestError from src/lib.rs, allowing the public integration
+  test to construct a citation and match the typed AnnotatedText error. The
+  existing guard rejects the nonempty list without changes. Python maps user
+  text without these annotations; explicit rejection is our deliberately
+  stricter first subset, not a claim that Python rejects it.
+- **5.3.3 verified (14 November 2026):** `cargo test --test
+  azure_openai_request` passes all three request tests. The learner's
+  request_body_accepts_empty_annotations test verifies `Some(vec![])`
+  produces the same exact user input JSON shape as ordinary unannotated Text.
+  The existing guard accepts both None and an empty list, while the separate
+  5.3.2 test verifies a nonempty citation list is rejected.
+- **5.3.4 verified (14 November 2026):** `cargo test --test
+  azure_openai_request` passes all four request tests. The learner's
+  request_body_rejects_unsupported_function_call test places ordinary Text
+  before a FunctionCall in an assistant message and confirms the mapper
+  returns UnsupportedContent rather than a partial successful body. Python has
+  broader function-call support; this rejection is a deliberate temporary
+  Rust subset, not Python parity.
+- **5.3.5 verified (14 November 2026):** `cargo test --test
+  azure_openai_request` passes all five request tests. The learner made
+  request_body mutable and uses if let Some(instruction) to insert a
+  top-level "instructions" JSON string; None leaves the key absent. The
+  exact-body test verifies the user input remains separate. Initially an
+  unnecessary else returned &Value while assignment returned (), producing
+  E0308, and the key was singular "instruction"; the learner removed the
+  else and corrected the key. Python's _prepare_options retains non-None
+  instructions as a top-level field rather than injecting a system message.
+- **5.3.6 verified (14 November 2026):** `cargo test --test
+  azure_openai_request` passes all six request tests, including
+  request_body_preserves_empty_instructions. None omits the field; Some("")
+  produces `"instructions": ""`. Python filters only None from options at
+  this point, not empty strings.
+- **5.3.7 verified (14 November 2026):** `cargo test --test
+  azure_openai_request` passes all seven request tests. The learner added
+  `"type": "message"` to message_json and updated the four older exact-body
+  test expectations. The new request_body_labels_user_input_as_message test
+  passes. The coach had previously omitted this field from those expectations;
+  that omission is not established to make a real API request invalid.
+  Source inspection shows `_prepare_message_for_openai` in the local Python
+  Responses adapter initializes every message object with `"type":
+  "message"` and `"role": message.role`. Explain that the outer type labels
+  the whole input item, whereas nested input_text labels one content part;
+  role says who spoke.
+- **5.3.8 verified (15 November 2026):** `cargo test --test
+  azure_openai_request` passes all eight request tests. The learner now maps
+  user Text to input_text and assistant history Text to output_text with
+  annotations: []. The test first exposed that serializing annotations: None
+  directly produces JSON null; the learner changed the provider representation
+  to the empty array required by the Python Responses adapter.
+- **5.3.9 verified (15 November 2026):** `cargo test --test
+  azure_openai_request` passes all nine request tests. The learner added
+  AzureOpenAIRequestError::UnsupportedRole and checks the borrowed role once
+  inside the outer message loop, before iterating content. Only "user" and
+  "assistant" proceed to content mapping; a system message returns the
+  dedicated error. The integration test imports the public error type.
+- **5.3.10 verified (15 November 2026):** `cargo test --test
+  azure_openai_request` passes all ten request tests. The learner added
+  `AzureOpenAIRequestError::EmptyInput` and rejects an empty message slice.
+  This is an outgoing request constraint; it does not change Chapter 4's
+  valid empty ChatResponse behavior.
+- **5.3.11 test verified (15 November 2026):** `cargo test --test
+  azure_openai_request` passes all eleven request tests, including
+  request_body_rejects_message_without_content. A lone empty-content message
+  must not produce an empty-content provider message; because it contributes
+  no prepared item, the whole request returns EmptyInput.
+- Review found the implementation currently returns EmptyInput immediately
+  for every empty-content message. The Python mapper omits that message and
+  rejects only if the entire prepared input list is empty. Thus an empty
+  message beside a valid one should not discard or reject the valid input.
+- **5.3.12 verified (15 November 2026):** `cargo test --test
+  azure_openai_request` passes all twelve request tests. Empty-content
+  messages are skipped; the overall prepared input is checked after the
+  message loop. A lone empty message returns EmptyInput, while an empty
+  message before a valid "Hello" message is omitted and the valid input is
+  preserved. The check initially sat inside the loop, where the first valid
+  message necessarily saw an empty input vector; moving it after the loop
+  resolved the 10 regressions. The three Azure config tests also pass in the
+  focused combined run.
+- **5.3.13 verified (15 November 2026):** `cargo test --test
+  azure_openai_request --test azure_openai_config` passes all sixteen focused
+  tests (thirteen request, three config). The new
+  `request_body_preserves_text_item_order` test verifies that two Text strings
+  in one user Message become two `input_text` content items in the same order.
+- **5.3.14 verified (15 November 2026):** the new
+  `request_body_preserves_empty_text_item` test verifies that a user Message
+  containing one empty Text string maps to one `input_text` item with
+  `"text": ""`. This differs from a Message whose `contents` vector has zero
+  items, which the mapper skips. The Python Responses mapper emits the
+  input-text object without filtering its empty string. This is a request
+  mapping contract, not a claim that a live provider accepts that request.
+  `cargo test --quiet` passes all 110 tests: 74 library, 9 public API,
+  8 async-practice, 3 Azure config, 14 request mapping, and 2 session tests.
+- **5.3.15 verified (15 November 2026):** the learner's
+  `parse_response(&self, response: &Value)` maps one provider `output_text`
+  item into an assistant Message and preserves both the `resp_123` response
+  ID and `msg_123` message ID in the happy-path test. The learner fixed the
+  missing `impl` closing brace, borrowed-method signature, and `&str` type
+  comparison. `cargo test --test azure_openai_request --test azure_openai_config`
+  passes all 18 focused tests (15 request/response, 3 config). The new
+  `serde_json::json` import is unused. The Python `_parse_response_from_openai`
+  likewise maps response output messages and retains the IDs.
+- **5.3.16 verified (15 November 2026):** the learner's test places valid
+  output text before a refusal content item. The learner changed both loops
+  to return String errors for unsupported kinds instead of skipping them.
+  `cargo test --test azure_openai_request --test azure_openai_config` passes
+  all 19 focused tests (16 request/response, 3 config). The earlier E0308
+  occurred because the response parser's declared error is String, not the
+  request-specific AzureOpenAIRequestError. The refusal test exercises the
+  inner content loop, not the outer output-item loop. Python maps refusals
+  with metadata; rejecting them is a deliberate first Rust subset, not parity.
+- **5.3.17 verified (15 November 2026):** the learner's test places a supported
+  output message before a top-level function call and verifies an error rather
+  than a partial ChatResponse. The outer output-item check already rejects
+  non-message items. `cargo test --test azure_openai_request --test
+  azure_openai_config` passes all 20 focused tests (17 request/response,
+  3 config). Python handles function-call output; rejecting it is a
+  deliberate Rust subset, not Python parity.
+- **5.3.18 verified (15 November 2026):** `cargo test --test
+  azure_openai_request --test azure_openai_config` passes all 21 focused
+  tests (18 request/response, 3 config). The learner reads annotations as an
+  array and uses `!annotations.is_empty()` to reject a nonempty list while
+  accepting `[]`. An earlier inverted condition broke both the simple-response
+  and citation tests; `!` reverses a boolean, so `!true` is false and `!false`
+  is true. Python maps URL citations and their spans; explicit rejection is a
+  deliberate temporary Rust subset, not Python parity.
+- **5.3.19 verified (15 November 2026):** `cargo test --test
+  azure_openai_request --test azure_openai_config` passes all 22 focused
+  tests (19 request/response, 3 config). The learner moved the fallback after
+  the output loop. When `output` is empty, the mapper creates one assistant
+  Message with empty contents and no message ID, and retains the response ID,
+  matching Python's fallback. Previously the check was inside the loop, which
+  runs zero times for empty output and cannot see an empty list after a push.
+  This provider-response behavior differs from rejecting an empty outgoing
+  request and from allowing an empty framework ChatResponse in general.
+- **5.3.20 verified (15 November 2026):** `cargo test --test
+  azure_openai_request --test azure_openai_config` passes all 23 focused
+  tests (20 request/response, 3 config). The new test verifies that two
+  assistant output messages with distinct IDs and texts remain two messages
+  in order with the correct IDs and texts. Python's response adapter also
+  creates a new message when the next ID differs; this test does not
+  establish parity for repeated or missing IDs.
+- **5.3.21 verified (15 November 2026):** `cargo test --test
+  azure_openai_request --test azure_openai_config` passes all 24 focused
+  tests (21 request/response, 3 config). The learner rejects a non-assistant
+  provider output role instead of returning it as a user message. Python's
+  response parser creates assistant Messages; rejection is a deliberately
+  stricter Rust subset, not a claim that Python rejects the same input.
+- **5.3.22 verified (15 November 2026):** the learner's test confirms a
+  provider `output` object returns an error instead of being treated as an
+  empty output array. The full `cargo test --quiet` suite passes all 118
+  tests, including the 22 request/response mapping tests and 3 config tests.
+- **Section 5.3 checkpoint:** complete only for the initial offline unannotated
+  text subset. Request mapping rejects unsupported content and nonempty
+  annotations. Response mapping rejects unsupported kinds, roles, and nonempty
+  annotations; its errors are currently String values. It maps empty output
+  to one empty assistant message and preserves IDs for the tested cases.
+  Other response metadata and status are ignored, and repeated/missing
+  message-ID parity is not established. There is no live transport, SDK,
+  authentication, or `ChatClient` implementation. The local ignored book was
+  updated and rebuilt through 5.3.22; `validate_book.py` passed with 130
+  pages, 96 bookmarks, and 199 links. Include the tracked journey and both
+  maps in the learner's Git checkpoint; the ignored book is not in Git.
+  The Rust MAF map is in `docs/rust-maf-map.md`, with an editable visual in
+  `docs/rust-maf-map.excalidraw`.
+- **Next exercise: 5.4.1 - reject failed provider responses.** Give one offline
+  test in chat using `status: "failed"`, an error object, and `output: []`;
+  it should return `Err`, not the successful empty assistant fallback.
+  The current parser ignores status, so the test should initially fail.
+  This is a deliberate Rust safety rule, not a claim that the Python parser
+  raises for this status. Python uses status for finish reason and retains a
+  continuation token for queued/in-progress responses; Rust does neither.
+  Other status cases and real HTTP/service failures remain future exercises.
+- **Live endpoint plan:** Chapter 5, near section 5.5, may include a separate
+  opt-in live Azure OpenAI smoke test after request/response mapping, transport,
+  authentication, and offline tests exist. Section 5.5 still keeps routine
+  tests deterministic and credential-free. No live call has been made.
 - The local `python/packages/openai/README.md` recommends the Responses API
   client OpenAIChatClient for new work; that same class supports Azure routing.
   Use this Azure-configured Responses path for the first read-only walkthrough,

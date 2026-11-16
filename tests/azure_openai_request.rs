@@ -707,3 +707,295 @@ fn response_rejects_output_that_is_not_an_array() {
 
     assert!(result.is_err(), "output must be an array");
 }
+
+#[test]
+fn response_rejects_failed_provider_status() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_failed",
+        "status": "failed",
+        "error": {
+            "code": "server_error",
+            "message": "The provider failed"
+        },
+        "output": []
+    });
+
+    let result = config.parse_response(&provider_response);
+
+    assert!(
+        result.is_err(),
+        "a failed response must not become a successful empty message"
+    );
+}
+
+#[test]
+fn response_failure_includes_provider_error_message() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_failed",
+        "status": "failed",
+        "error": {
+            "code": "server_error",
+            "message": "The provider failed"
+        },
+        "output": []
+    });
+
+    let error = config
+        .parse_response(&provider_response)
+        .expect_err("a failed provider response should return an error");
+
+    assert!(
+        error.contains("The provider failed"),
+        "the error should include the provider's message, got: {error}"
+    );
+}
+
+#[test]
+fn response_failed_without_provider_message_keeps_generic_error() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_failed",
+        "status": "failed",
+        "error": {
+            "code": "server_error"
+        },
+        "output": []
+    });
+
+    let error = config
+        .parse_response(&provider_response)
+        .expect_err("a failed provider response should return an error");
+
+    assert!(
+        error.contains("failed response"),
+        "a missing provider message should preserve the generic failure, got: {error}"
+    );
+}
+
+#[test]
+fn response_failure_includes_provider_error_code_and_message() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_failed",
+        "status": "failed",
+        "error": {
+            "code": "server_error",
+            "message": "The provider failed"
+        },
+        "output": []
+    });
+
+    let error = config
+        .parse_response(&provider_response)
+        .expect_err("a failed provider response should return an error");
+
+    assert!(
+        error.contains("server_error"),
+        "the error should include the provider code, got: {error}"
+    );
+    assert!(
+        error.contains("The provider failed"),
+        "the error should include the provider message, got: {error}"
+    );
+}
+
+#[test]
+fn response_failure_without_code_uses_message_only() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_failed",
+        "status": "failed",
+        "error": {
+            "message": "The provider failed"
+        },
+        "output": []
+    });
+
+    let error = config
+        .parse_response(&provider_response)
+        .expect_err("a failed provider response should return an error");
+
+    assert_eq!(
+        error.as_str(),
+        "The provider failed",
+        "without a code, do not add a placeholder; got: {error}"
+    );
+}
+
+#[test]
+fn response_failure_with_empty_code_uses_message_only() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_failed",
+        "status": "failed",
+        "error": {
+            "code": "",
+            "message": "The provider failed"
+        },
+        "output": []
+    });
+
+    let error = config
+        .parse_response(&provider_response)
+        .expect_err("a failed provider response should return an error");
+
+    assert_eq!(
+        error.as_str(),
+        "The provider failed",
+        "an empty code should not add a prefix; got: {error}"
+    );
+}
+
+#[test]
+fn response_rejects_in_progress_status_without_continuation_support() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_running",
+        "status": "in_progress",
+        "output": []
+    });
+
+    let result = config.parse_response(&provider_response);
+
+    assert!(
+        result.is_err(),
+        "an in-progress response must not become an empty final answer"
+    );
+}
+
+#[test]
+fn response_rejects_queued_status_without_continuation_support() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_queued",
+        "status": "queued",
+        "output": []
+    });
+
+    let result = config.parse_response(&provider_response);
+
+    assert!(
+        result.is_err(),
+        "a queued response must not become an empty final answer"
+    );
+}
+
+#[test]
+fn response_rejects_incomplete_status_without_finish_reason_support() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_incomplete",
+        "status": "incomplete",
+        "incomplete_details": {
+            "reason": "max_output_tokens"
+        },
+        "output": []
+    });
+
+    let result = config.parse_response(&provider_response);
+
+    assert!(
+        result.is_err(),
+        "an incomplete response must not be presented as a completed answer"
+    );
+}
+
+#[test]
+fn response_rejects_cancelled_status_without_cancelled_result_support() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_cancelled",
+        "status": "cancelled",
+        "output": []
+    });
+
+    let result = config.parse_response(&provider_response);
+
+    assert!(
+        result.is_err(),
+        "a cancelled response must not become an empty successful answer"
+    );
+}
+
+#[test]
+fn response_maps_completed_status_as_successful_response() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let provider_response = serde_json::json!({
+        "id": "resp_completed",
+        "status": "completed",
+        "output": [{
+            "type": "message",
+            "id": "msg_completed",
+            "role": "assistant",
+            "content": [{
+                "type": "output_text",
+                "text": "Hello",
+                "annotations": []
+            }]
+        }]
+    });
+
+    let chat_response = config
+        .parse_response(&provider_response)
+        .expect("a completed response should map successfully");
+
+    assert_eq!(chat_response.response_id(), Some("resp_completed"));
+    assert_eq!(chat_response.messages()[0].text(), "Hello");
+}

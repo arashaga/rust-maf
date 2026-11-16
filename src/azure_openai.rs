@@ -1,4 +1,4 @@
-use std::env::var_os;
+use std::{env::var_os, str::SplitTerminator};
 
 use crate::{ChatResponse, types::{Content, Message}};
 use serde_json::{json, Value};
@@ -138,6 +138,37 @@ impl AzureOpenAIConfig {
 
         let mut messages: Vec<Message> = Vec::new();
         // let mut contents: Vec<Content> = Vec::new();
+
+        let status = response.get("status").and_then(|value| value.as_str());
+
+        if status == Some("failed") {
+            let code = response.get("error")
+                    .and_then(|value| value.get("code"))
+                    .and_then(|value| value.as_str());
+
+            let error = response.get("error")
+                    .and_then(|value| value.get("message"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("failed response from the provider"); // does not panic and provides a default value if None
+           
+            if let Some(code_value) = code {
+                    if !code_value.is_empty() {
+                        return Err(format!("{}: {}", code_value, error));
+                    }
+       
+            }
+            return Err(error.to_string());
+            
+        }else if status == Some("in_progress"){
+            return Err("an in-progress response must not become an empty final answer".to_string());
+        }else if status == Some("queued"){
+            return Err("a queued response must not become an empty final answer".to_string());
+        }else if status == Some("incomplete"){
+            return Err("an incomplete response must not be presented as a completed answer".to_string());
+        }else if status == Some("cancelled"){
+            return Err("a cancelled response must not become an empty successful answer".to_string());
+        }
+
 
         let response_id = response.get("id").and_then(|value| value.as_str()).ok_or("Missing response id")?.to_string();
         let output_value = response

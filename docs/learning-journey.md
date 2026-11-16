@@ -6,15 +6,18 @@ computer can continue without access to earlier chats.
 
 ## Resume here
 
-- Last completed section: **5.3, offline request/response mapping for the
-  initial text-only subset**, completed 15 November 2026. `cargo test --quiet`
-  passes **118 tests**: 74 library, 9 public API, 8 async-practice, 3 Azure
-  config, 22 request/response, and 2 session integration tests.
-- **Resume at 5.4.1:** prevent a provider response with status `failed` from
-  becoming an apparently successful empty assistant message. The current
-  parser uses `Result<ChatResponse, String>` and ignores status; no transport
-  exists yet. The earlier exercises and class/data map are recorded below and
-  in `docs/rust-maf-map.md`.
+- Last completed section: **5.4, offline provider response-status handling**,
+  completed 16 November 2026. `cargo test --quiet` passes **129 tests**:
+  74 library, 9 public API, 8 async-practice, 3 Azure config, 33
+  request/response, and 2 session integration tests.
+- **Resume at 5.5.1:** build an offline `reqwest` request for the Azure
+  Responses API. The learner selected direct HTTP with `reqwest` instead of an
+  OpenAI-compatible SDK on 16 November 2026, and chose to support both API-key
+  and Entra ID authentication. Use an injected async token-provider hook for
+  Entra; when both sources are configured, the token provider takes precedence,
+  matching the Python reference. No reqwest dependency, transport, or live
+  call exists yet. Earlier exercises and the class/data map are recorded below
+  and in `docs/rust-maf-map.md`.
 - **Chapter 4 status:** complete for the initial Rust subset, not full Python
   content, metadata, or JSON parity. No changes have been staged, committed,
   or pushed by the coach.
@@ -251,14 +254,72 @@ computer can continue without access to earlier chats.
   maps in the learner's Git checkpoint; the ignored book is not in Git.
   The Rust MAF map is in `docs/rust-maf-map.md`, with an editable visual in
   `docs/rust-maf-map.excalidraw`.
-- **Next exercise: 5.4.1 - reject failed provider responses.** Give one offline
-  test in chat using `status: "failed"`, an error object, and `output: []`;
-  it should return `Err`, not the successful empty assistant fallback.
-  The current parser ignores status, so the test should initially fail.
-  This is a deliberate Rust safety rule, not a claim that the Python parser
-  raises for this status. Python uses status for finish reason and retains a
-  continuation token for queued/in-progress responses; Rust does neither.
-  Other status cases and real HTTP/service failures remain future exercises.
+- **5.4.1 verified (16 November 2026):** `response_rejects_failed_provider_status`
+  confirms a response with status `failed` returns `Err` instead of being
+  treated as an empty successful assistant message. The parser compares the
+  optional status to `Some("failed")`, so a missing status remains accepted;
+  all 23 request/response tests pass. This is a deliberate Rust safety rule,
+  not a claim that the Python parser raises for this status.
+- **5.4.2 verified (16 November 2026):** the test confirms that a failed
+  response's `error.message` appears in the returned error. All 24
+  request/response tests passed at that point. The learner extracts the
+  underlying `&str` with `as_str()` so the returned text does not include JSON
+  quotes.
+- **5.4.3 verified (16 November 2026):** a failed response without
+  `error.message` returns the generic failed-response error. The learner keeps
+  the optional message as `Option<&str>` and uses `unwrap_or` before
+  constructing the error, so the absent value does not terminate parsing with
+  an unrelated missing-field message. All 25 request/response mapper tests
+  pass.
+- **5.4.4 verified (16 November 2026):** `response_failure_includes_provider_error_code_and_message`
+  confirms the failed-response error includes both provider code and message.
+  All 26 request/response mapper tests pass. Python's streaming error type also
+  retains both and prefixes the message with the code when available.
+- **5.4.5 verified (16 November 2026):** a failed response with a message and
+  no error code returns just the provider message, without a fabricated code
+  label. All 27 request/response mapper tests pass.
+- **5.4.6 verified (16 November 2026):** a failed response with an empty
+  error code returns the provider message without a blank code prefix. The
+  focused test passes, and all 28 request/response mapper tests pass. This
+  follows the Python stream-error formatter's rule to prefix only a nonempty
+  code; applying it to response-body mapping remains a deliberate subset.
+- **5.4.7 verified (16 November 2026):** an `in_progress` response with empty
+  output returns an error rather than being mapped to an empty final answer.
+  The learner added an explicit status guard because this Rust subset has no
+  continuation-token or polling behavior. All 29 request/response mapper
+  tests pass.
+- **5.4.8 verified (16 November 2026):** a `queued` response with empty output
+  returns an error instead of an empty successful answer. Python uses a
+  continuation token for this state; Rust does not support resuming it yet.
+  All 30 request/response mapper tests pass.
+- **5.4.9 verified (16 November 2026):** an `incomplete` response with reason
+  `max_output_tokens` and empty output returns an error rather than an empty
+  answer. Rust cannot store the corresponding finish reason in `ChatResponse`
+  yet; Python can. All 31 request/response mapper tests pass.
+- **5.4.10 verified (16 November 2026):** a `cancelled` response returns an
+  error rather than an empty success. The learner corrected the status-string
+  spelling, and all 32 request/response mapper tests pass. Python recognizes
+  `cancelled` as a terminal response status; Rust's explicit rejection is a
+  deliberate interim subset.
+- **5.4.11 verified (16 November 2026):**
+  `response_maps_completed_status_as_successful_response` confirms a
+  `completed` response still maps successfully and preserves its response ID
+  and assistant text. All 33 request/response mapper tests pass.
+- **Section 5.4 checkpoint:** the offline mapper rejects `failed`,
+  `in_progress`, `queued`, `incomplete`, and `cancelled` instead of returning
+  an empty or misleading successful answer. Failed-response errors include a
+  nonempty provider code and message when available, with a generic fallback
+  if the message is missing. A missing status remains accepted for existing
+  fixtures, and a `completed` response follows normal output mapping. These
+  rejections are a deliberate Rust subset: continuation tokens, finish
+  reasons, and cancelled outcomes are not modeled. HTTP, authentication,
+  transport, and service errors are not yet handled because no transport
+  exists. The full `cargo test --quiet` suite passes all 129 tests.
+- **Next exercise: 5.5.1 - build an offline reqwest request.** Test that when
+  both an API key and an already-resolved Entra token are available, the
+  request uses bearer authentication and omits the API-key header. Build and
+  inspect the request only; do not send it or use a real credential. The async
+  token-provider hook will be a separate follow-up.
 - **Live endpoint plan:** Chapter 5, near section 5.5, may include a separate
   opt-in live Azure OpenAI smoke test after request/response mapping, transport,
   authentication, and offline tests exist. Section 5.5 still keeps routine

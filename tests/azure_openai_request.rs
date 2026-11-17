@@ -999,3 +999,39 @@ fn response_maps_completed_status_as_successful_response() {
     assert_eq!(chat_response.response_id(), Some("resp_completed"));
     assert_eq!(chat_response.messages()[0].text(), "Hello");
 }
+
+#[test]
+fn http_request_prefers_bearer_token_when_api_key_is_also_available() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let request = config
+        .build_http_request(
+            &messages,
+            None,
+            Some("test-api-key"),
+            Some("test-bearer-token"),
+        )
+        .expect("a valid HTTP request should be built");
+
+    assert_eq!(request.method().as_str(), "POST");
+    assert_eq!(request.url().path(), "/openai/v1/responses");
+    assert_eq!(
+        request
+            .headers()
+            .get("authorization")
+            .and_then(|value| value.to_str().ok()),
+        Some("Bearer test-bearer-token")
+    );
+    assert!(request.headers().get("api-key").is_none());
+}

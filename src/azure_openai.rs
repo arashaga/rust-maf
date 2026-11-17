@@ -134,6 +134,37 @@ impl AzureOpenAIConfig {
         Ok(request_body)
     }
 
+    pub fn build_http_request(&self,
+         messages: &[Message],
+        instructions: Option<&str>,
+        api_key: Option<&str>,
+        bearer_token: Option<&str>
+    ) -> Result<reqwest::Request, String>{
+
+        // converts the error defined in the class to a string
+        let body =self.build_request_body(messages, instructions)
+        .map_err(|error| format!("failed to build Azure request body: {error:?}"))?;
+        let url = format!(
+            "{}/openai/v1/responses",
+            self.endpoint().trim_end_matches('/')
+        );
+
+        let mut request = reqwest::Client::new()
+            .post(url)
+            .json(&body);
+        
+        if let Some(token) = bearer_token{
+            request = request.bearer_auth(token);
+        }else if let Some(key) = api_key {
+            request = request.header("api-key", key);
+        }
+
+        request.build()
+        .map_err(|error| format!("failed to build Azure request body: {error:?}"))
+        
+
+    }
+
     pub fn parse_response(&self,response : &Value) -> Result<ChatResponse, String>{
 
         let mut messages: Vec<Message> = Vec::new();

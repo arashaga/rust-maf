@@ -1035,3 +1035,263 @@ fn http_request_prefers_bearer_token_when_api_key_is_also_available() {
     );
     assert!(request.headers().get("api-key").is_none());
 }
+
+#[test]
+fn http_request_uses_api_key_when_bearer_token_is_absent() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let request = config
+        .build_http_request(
+            &messages,
+            None,
+            Some("test-api-key"),
+            None,
+        )
+        .expect("a valid HTTP request should be built");
+
+    assert_eq!(
+        request
+            .headers()
+            .get("api-key")
+            .and_then(|value| value.to_str().ok()),
+        Some("test-api-key")
+    );
+    assert!(// check to see if authorization is actually None otherwise error out
+        request.headers().get("authorization").is_none(), // if found Some() otherwise None
+        "API-key auth should not also set a bearer Authorization header"
+    );
+}
+
+#[test]
+fn http_request_trims_trailing_slash_from_endpoint() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com/".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let request = config
+        .build_http_request(
+            &messages,
+            None,
+            Some("test-api-key"),
+            None,
+        )
+        .expect("a valid HTTP request should be built");
+
+    assert_eq!(request.url().path(), "/openai/v1/responses");
+}
+
+#[test]
+fn http_request_sets_json_content_type() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let request = config
+        .build_http_request(
+            &messages,
+            None,
+            Some("test-api-key"),
+            None,
+        )
+        .expect("a valid HTTP request should be built");
+
+    // `Result::ok()` maps Ok(value) to Some(value) and Err(_) to None, discarding the error.
+    // `Option::ok_or(error)` maps Some(value) to Ok(value) and None to Err(error).
+    assert_eq!(
+        request
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
+        Some("application/json")
+    );
+}
+
+#[test]
+fn http_request_rejects_missing_authentication() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let result = config.build_http_request(&messages, None, None, None);
+
+    assert!(
+        result.is_err(),
+        "request construction should fail without an API key or bearer token"
+    );
+}
+
+#[test]
+fn http_request_serializes_the_request_body() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let expected_body = config
+        .build_request_body(&messages, None)
+        .expect("valid messages should map to a request body");
+
+    let request = config
+        .build_http_request(
+            &messages,
+            None,
+            Some("test-api-key"),
+            None,
+        )
+        .expect("a valid HTTP request should be built");
+
+    let body_bytes = request
+        .body()
+        .and_then(|body| body.as_bytes())
+        .expect("the prepared JSON body should be available as bytes");
+        // from_slcie will tunr the bytes back to JSON value
+    let actual_body: serde_json::Value = serde_json::from_slice(body_bytes)
+        .expect("the prepared request body should be valid JSON");
+
+    assert_eq!(actual_body, expected_body);
+}
+
+#[test]
+fn http_request_propagates_body_mapping_error() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let messages = vec![Message::new(
+        "system".to_string(),
+        vec!["Use concise answers.".to_string()],
+        None,
+        None,
+    )];
+
+    let result = config.build_http_request(
+        &messages,
+        None,
+        Some("test-api-key"),
+        None,
+    );
+
+    let error = match result {
+        Ok(_) => panic!("a system-role message should not build an Azure request"),
+        Err(error) => error,
+    };
+
+    assert!(
+        error.starts_with("failed to build Azure request body:"),
+        "expected a request-body mapping error, got: {error}"
+    );
+}
+
+#[test]
+fn http_request_rejects_invalid_endpoint_url() {
+    let config = AzureOpenAIConfig::new(
+        "not-a-url".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("a nonempty endpoint should pass configuration validation");
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let result = config.build_http_request(
+        &messages,
+        None,
+        Some("test-api-key"),
+        None,
+    );
+
+    let error = match result {
+        Ok(_) => panic!("a request should not be built for an invalid endpoint URL"),
+        Err(error) => error,
+    };
+
+    assert!(
+        error.starts_with("failed to build Azure HTTP request:"),
+        "expected a request-build error, got: {error}"
+    );
+}
+
+#[test]
+fn http_request_rejects_invalid_api_key_header_value() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted");
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let result = config.build_http_request(
+        &messages,
+        None,
+        Some("test\napi-key"),
+        None,
+    );
+
+    let error = match result {
+        Ok(_) => panic!("a request should not be built with an invalid API-key header"),
+        Err(error) => error,
+    };
+
+    assert!(
+        error.starts_with("failed to build Azure HTTP request:"),
+        "expected a request-build error, got: {error}"
+    );
+}

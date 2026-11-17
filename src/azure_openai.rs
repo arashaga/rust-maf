@@ -157,10 +157,12 @@ impl AzureOpenAIConfig {
             request = request.bearer_auth(token);
         }else if let Some(key) = api_key {
             request = request.header("api-key", key);
+        } else {
+            return Err("request construction should fail without an API key or bearer token".to_string());
         }
 
         request.build()
-        .map_err(|error| format!("failed to build Azure request body: {error:?}"))
+        .map_err(|error| format!("failed to build Azure HTTP request: {error:?}"))
         
 
     }

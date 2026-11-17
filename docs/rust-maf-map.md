@@ -10,8 +10,8 @@ diagrams below are rendered in VS Code's Markdown preview and on GitHub.
 **Agent runs a turn. Session remembers turns. Message is one turn. Content is
 what a turn contains. ChatClient is the model-call boundary.**
 
-The Azure code has separate, offline request and response mappers. It does not
-implement `ChatClient` and does not send an HTTP request.
+The Azure code maps request/response data offline and can construct a
+`reqwest::Request`. It does not send the request or implement `ChatClient`.
 
 ## Main types and relationships
 
@@ -96,6 +96,7 @@ class AzureOpenAIConfig {
   +endpoint()
   +deployment()
   +build_request_body(messages, instructions)
+  +build_http_request(messages, instructions, api_key, bearer_token)
   +parse_response(response)
 }
 
@@ -231,6 +232,11 @@ flowchart LR
   Config["AzureOpenAIConfig<br/>endpoint + deployment"] --> Builder
   Builder -->|"Ok"| Body["serde_json::Value<br/>JSON request body"]
   Builder -->|"Err"| Error["AzureOpenAIRequestError"]
+  Body --> RequestBuilder["AzureOpenAIConfig::build_http_request"]
+  Config --> RequestBuilder
+  Auth["Optional API key + bearer token"] --> RequestBuilder
+  RequestBuilder -->|"Ok"| Request["reqwest::Request<br/>prepared, not sent"]
+  RequestBuilder -->|"Err"| HttpError["String error"]
 ```
 
 The builder currently handles this deliberate first subset:
@@ -253,9 +259,29 @@ The configuration constructor rejects exactly empty endpoint or deployment
 strings using `AzureOpenAIConfigError`. It does not validate whitespace or
 the full endpoint URL.
 
-The builder creates JSON; the separate parser reads a provider response JSON
-value. Neither authenticates, connects to Azure, sends HTTP, or implements
-`ChatClient`. Those are future exercises.
+The JSON builder creates the request body. The HTTP request builder combines
+that body with the endpoint route and optional authentication headers, preferring
+the bearer token when both a token and API key are provided, and using the
+`api-key` header when only an API key is supplied. It returns a prepared
+`reqwest::Request`; it does not acquire or refresh tokens, send HTTP, read a
+provider response, or implement `ChatClient`. It removes trailing `/`
+characters from the configured endpoint before appending the Responses route.
+The reqwest JSON helper serializes the JSON value into the request body and
+sets `Content-Type: application/json`. It returns an error when both
+credential arguments are `None`, preferring a bearer token when present and
+falling back to the API-key header. The offline test
+`http_request_serializes_the_request_body` parses the prepared request's bytes
+as JSON and compares them with the mapper output. All 39 HTTP request/response
+tests passed at 5.5.6. `http_request_propagates_body_mapping_error` confirms
+the builder returns body-mapping failures as a prefixed string; all 40 request
+tests passed at 5.5.7. `http_request_rejects_invalid_endpoint_url` verifies
+that reqwest rejects a nonempty malformed URL; all 41 request tests pass. The
+`http_request_rejects_invalid_api_key_header_value` test confirms reqwest
+rejects an invalid header value. All 42 request tests and all 138 project tests
+pass, completing the offline request-builder subset in section 5.5. The next
+section is 5.6: add a stored async token-provider callback, following Python's
+callable-provider contract and preserving token-provider precedence.
+The separate parser reads a provider response JSON value.
 
 ### Mapping a response
 

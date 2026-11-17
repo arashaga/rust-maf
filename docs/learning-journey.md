@@ -6,22 +6,24 @@ computer can continue without access to earlier chats.
 
 ## Resume here
 
-- Last completed section: **5.4, offline provider response-status handling**,
-  completed 16 November 2026. Latest completed exercise: **5.5.1**, verified
-  17 November 2026. `cargo test --quiet` passes **130 tests**:
-  74 library, 9 public API, 8 async-practice, 3 Azure config, 34
-  request/response/HTTP, and 2 session integration tests. Existing compiler
-  warnings remain.
-- **Resume at 5.5.2:** verify the API-key-only authentication fallback in an
-  offline request. Provide one complete test in chat when coaching resumes;
-  do not insert tests or write production code for the learner. The learner
+- Last completed section: **5.5, offline prepared Azure request construction**,
+  completed 17 November 2026. The 42 request/response tests and full project
+  suite (138 tests) pass. Existing compiler warnings remain. The full worktree
+  whitespace check passes.
+- **Resume at 5.6.1:** add the stored async token-provider hook. Python accepts
+  a callable returning a token string or awaitable token, and prefers the
+  provider over an API key. This Rust subset deliberately supports async
+  providers only. The learner selected storing a callback on the client/config.
+  Start with one offline test proving the provider supplies the bearer token
+  when both it and an API key are configured. Do not send a request or write
+  production code for the learner. The learner
   selected direct HTTP with `reqwest` instead of an
   OpenAI-compatible SDK on 16 November 2026, and chose to support both API-key
   and Entra ID authentication. Use an injected async token-provider hook for
   Entra; when both sources are configured, the token provider takes precedence,
-  matching the Python reference. An offline reqwest request builder now
-  exists; sending requests and the async token-provider hook are not
-  implemented. No live call has been made. Earlier exercises and the
+  matching the Python reference. The offline reqwest request builder is
+  implemented and tested; the async token-provider hook is the next section.
+  No live call has been made. Earlier exercises and the
   class/data map are recorded below
   and in `docs/rust-maf-map.md`.
 - **5.5.1 verified (17 November 2026):** the learner added reqwest with
@@ -36,26 +38,84 @@ computer can continue without access to earlier chats.
   build_request_body for JSON, strips trailing endpoint slashes before
   appending the route, and attaches the JSON with reqwest's request builder.
   It matches Some(token) against bearer_token before an else-if API-key
-  fallback and returns build().map_err(...) without sending anything.
-  API-key-only behavior, JSON body/content-type, trailing-slash handling,
-  invalid URLs/headers, and propagation of body errors are not yet covered
-  by HTTP-builder tests. No-credential behavior currently builds an
-  unauthenticated request and has not been established as the final contract.
+  fallback and returns build().map_err(...) without sending anything. The
+  serialized HTTP body is checked by 5.5.6, body-error propagation by 5.5.7,
+  invalid endpoint handling by 5.5.8, and invalid API-key header handling by
+  5.5.9.
   During the exercise, explain the difference between the HTTP method and
   its JSON helper, pattern = expression in if let, and the final Result
   expression versus using ? to extract a success value.
-  **Paused at the learner's request:** do not start another exercise in
-  this session. Next time, begin 5.5.2 with the API-key-only test; the async
-  token-provider hook remains later work. Section 5.5 is not complete.
-  The ignored local learning book is absent on this computer; no book
-  update was possible. The tracked journey is the portable handoff.
+  Section 5.5 is now complete for the offline request-builder subset. The
+  async token-provider hook is deferred to section 5.6.
+- **5.5.2 verified (17 November 2026):**
+  `http_request_uses_api_key_when_bearer_token_is_absent` confirms that an
+  API-key-only request has the `api-key` header and no `Authorization` header.
+  The learner's added test passes; all 35 tests in
+  `cargo test --test azure_openai_request` pass. The assertion for the absent
+  header checks that `HeaderMap::get("authorization")` returns `None`.
+  Combined with 5.5.1, both credential branches are tested without sending a
+  request. The async token-provider hook is still not implemented.
+- **5.5.3 verified (17 November 2026):**
+  `http_request_trims_trailing_slash_from_endpoint` confirms an endpoint
+  ending in `/` still yields `/openai/v1/responses`. This matches the Python
+  Responses setup's `endpoint.rstrip('/')` behavior. All 36 tests in
+  `cargo test --test azure_openai_request` pass. At that point, the full
+  project suite had not been rerun since the 5.5.1 checkpoint.
+- **5.5.4 verified (17 November 2026):**
+  `http_request_sets_json_content_type` confirms that the prepared request
+  has `Content-Type: application/json`. Reqwest's `.json(&body)` helper
+  serializes the `serde_json::Value` body and supplies that header; the test
+  checks the header, while existing mapper tests check the JSON value. All 37
+  tests in `cargo test --test azure_openai_request` pass. At that point, the
+  full project suite had not been rerun since the 5.5.1 checkpoint. The test
+  initially had a non-failing unused-doc-comment warning, which the learner
+  corrected by using ordinary `//` comments. Trailing spaces in the added
+  test were cleaned up in 5.5.6.
+- **5.5.5 verified (17 November 2026):**
+  `http_request_rejects_missing_authentication` passes when both auth options
+  are `None`; the builder returns its `Err(String)` instead of producing an
+  unauthenticated request. The focused test passes, all 38 tests in
+  `cargo test --test azure_openai_request` pass, and the full project suite
+  passes all 134 tests. Bearer-token preference and API-key fallback remain
+  unchanged. No request was sent.
+- **5.5.6 verified (17 November 2026):**
+  `http_request_serializes_the_request_body` reads the prepared request's
+  in-memory bytes, parses them as JSON, and compares them with the value from
+  `build_request_body`. The focused test passes, and all 39 tests in
+  `cargo test --test azure_openai_request` pass. This remains an offline test;
+  no request is sent.
+- **5.5.7 verified (17 November 2026):**
+  `http_request_propagates_body_mapping_error` supplies a `system` message,
+  which the current mapper rejects, and a valid API key so the auth guard does
+  not mask the body error. The HTTP builder returns the prefixed `String`
+  error via its `map_err(...)?` path. The focused test passes, and all 40 tests
+  in `cargo test --test azure_openai_request` pass. No request is sent.
+- **5.5.8 verified (17 November 2026):**
+  `http_request_rejects_invalid_endpoint_url` uses a nonempty malformed
+  endpoint. Configuration accepts it because the constructor only rejects an
+  empty string; reqwest's URL conversion rejects it while constructing the
+  request, and the HTTP builder maps that failure to a prefixed `String`.
+  The focused test and all 41 request/response tests pass. No request is sent.
+- **5.5.9 verified (17 November 2026):**
+  `http_request_rejects_invalid_api_key_header_value` supplies an API key with
+  a newline. Reqwest rejects the invalid `HeaderValue` during request building,
+  and the builder returns a prefixed `String` error. The focused test and all
+  42 request/response tests pass. The full `cargo test --quiet` run passes all
+  138 tests. No request is sent.
+- The local book contains dedicated F.13 subsections on `.ok()`, `.ok_or()` /
+  `.ok_or_else()`, `.unwrap()` / `.expect()`, fallback methods, `?`, `.map()` /
+  `.map_err()` / `.and_then()`, and branch-inspection methods. It now records
+  5.5.5-5.5.9 and the planned 5.6.1 token-provider test. The PDF was rebuilt
+  and validated at 140 pages, 97 bookmarks, and 201 links. The book files are
+  ignored/local; this tracked journey remains the portable resume record.
 - **Chapter 4 status:** complete for the initial Rust subset, not full Python
   content, metadata, or JSON parity. No changes have been staged, committed,
   or pushed by the coach.
 - Section 5.1 was read-only source inspection and contract planning. Since
   then, the learner has added explicit configuration and offline request and
-  response mappers. Chapter 5 is still in progress; there is no transport,
-  provider SDK, Azure resource, credential, or live call.
+  response mappers and a request builder that prepares, but does not send,
+  HTTP requests. Chapter 5 is still in progress; there is no network-sending
+  transport, provider SDK, Azure resource, real credential, or live call.
 - **5.2.1 verified (13 November 2026):** `cargo test --test
   azure_openai_config` passes the single config_rejects_empty_deployment test.
   The learner created `src/azure_openai.rs` with AzureOpenAIConfig owning
@@ -346,11 +406,10 @@ computer can continue without access to earlier chats.
   reasons, and cancelled outcomes are not modeled. HTTP, authentication,
   transport, and service errors are not yet handled because no transport
   exists. The full `cargo test --quiet` suite passes all 129 tests.
-- **Next exercise: 5.5.1 - build an offline reqwest request.** Test that when
-  both an API key and an already-resolved Entra token are available, the
-  request uses bearer authentication and omits the API-key header. Build and
-  inspect the request only; do not send it or use a real credential. The async
-  token-provider hook will be a separate follow-up.
+- **At the 5.4 checkpoint (16 November):** the next planned exercise was
+  5.5.1, building an offline reqwest request with bearer-token precedence.
+  That exercise is now verified above. Do not treat this historical next-step
+  note as the current resume point.
 - **Live endpoint plan:** Chapter 5, near section 5.5, may include a separate
   opt-in live Azure OpenAI smoke test after request/response mapping, transport,
   authentication, and offline tests exist. Section 5.5 still keeps routine
@@ -359,7 +418,9 @@ computer can continue without access to earlier chats.
   client OpenAIChatClient for new work; that same class supports Azure routing.
   Use this Azure-configured Responses path for the first read-only walkthrough,
   not assumed older Azure-specific class names or Chat Completions schemas.
-  No Rust SDK, authentication method, deployment, or API version is selected.
+  The later transport decision is direct HTTP with `reqwest`; API-key
+  authentication and an injected async Entra token-provider hook were selected
+  for the Rust subset. No deployment or API version is selected.
 - **5.1.1 reference inspection:** in
   `python/packages/openai/agent_framework_openai/_chat_client.py`,
   `_prepare_options` assembles input and model, `_prepare_message_for_openai`

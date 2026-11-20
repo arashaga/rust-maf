@@ -277,10 +277,15 @@ the builder returns body-mapping failures as a prefixed string; all 40 request
 tests passed at 5.5.7. `http_request_rejects_invalid_endpoint_url` verifies
 that reqwest rejects a nonempty malformed URL; all 41 request tests pass. The
 `http_request_rejects_invalid_api_key_header_value` test confirms reqwest
-rejects an invalid header value. All 42 request tests and all 138 project tests
-pass, completing the offline request-builder subset in section 5.5. The next
-section is 5.6: add a stored async token-provider callback, following Python's
-callable-provider contract and preserving token-provider precedence.
+rejects an invalid header value. At the 5.5 checkpoint, all 42 request tests
+and all 138 project tests passed, completing the offline request-builder
+subset. Section 5.6.1 verifies the stored-provider path: the setter saves the
+callback without calling it, and the async wrapper awaits it and delegates
+to the synchronous builder. All 43 Azure request and response tests pass;
+the provider's bearer token wins over the API key. Next, 5.6.2 will test
+that a provider error is propagated rather than triggering API-key fallback.
+Python's `AzureTokenProvider` is a `Callable` type alias, not a trait; the
+book explains why this Rust subset chose a stored async callback.
 The separate parser reads a provider response JSON value.
 
 ### Mapping a response

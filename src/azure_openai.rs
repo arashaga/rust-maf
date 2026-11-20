@@ -1,11 +1,32 @@
 use std::{env::var_os, str::SplitTerminator};
 
+use std::{future::Future, pin::Pin};
+
+// define aliases
+// FN() is  atrain for something that can be called like a function here Something that can be called with zero arguments and returns a TokenFuture 
+//dyn Some callable object that returns a TokenFuture. I don't need to know its exact closure type.
+// Box handles the size versusu type wher eit's handled by dyn
+//Pin prevents moving the future out of that pinned allocation through safe operations when the future requires a stable location.
+// Sync and Send These are Rust's thread-safety marker traits.Send: safe to transfer between threads,Sync: safe to share references between threads
+/*
+Result<String, String>: produces either a token or an error.
+Future<Output = ...>: represents an asynchronous computation producing that result.
+dyn Future: we don't care which concrete future implementation it is.
++ Send: it can safely move between threads.
+Box: store the future behind an owned heap pointer.
+Pin: preserve the future's pinning guarantees.
+*/
+// Future is a train and Output is an associated type declared by that trait 
+type TokenFuture = Pin<Box<dyn Future<Output = Result<String, String>> + Send>>;
+type TokenProvider = Box<dyn Fn() -> TokenFuture + Send + Sync>;
+
 use crate::{ChatResponse, types::{Content, Message}};
 use serde_json::{json, Value};
 
 pub struct AzureOpenAIConfig {
     endpoint: String,
     deployment: String,
+    token_provider: Option<TokenProvider>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -29,6 +50,7 @@ impl AzureOpenAIConfig {
         Ok(Self {
             endpoint,
             deployment,
+            token_provider: None,
         })
         
     }
@@ -265,6 +287,42 @@ impl AzureOpenAIConfig {
         chat_response.set_response_id(Some(response_id));
         Ok(chat_response)
 
+    }
+
+    // F is a placeholder for concrete type when the fucntion gets called later Rust understands that F is the compiler-generated type of that function
+    pub fn with_token_provider<F, Fut>(mut self, provider: F) -> Self
+    where // provider must implmnted all of these
+    // the implmentor shoul dbe able to supply it's own token function hence the type of F in <F, Fut> is Fn() -> that returns a
+    F: Fn() -> Fut + Send + Sync + 'static,//'static means Does it avoid borrowing data that might expire before it's finished being used?
+    Fut: Future<Output = Result<String, String>> + Send + 'static,
+    {
+        let wrapped_provider = move || -> TokenFuture {
+            Box::pin(provider())
+        };
+
+    self.token_provider = Some(Box::new(wrapped_provider));
+
+    self
+    }
+
+    pub async fn build_http_request_with_token_provider(&self, //lets the method read the particular config it was called on without taking ownership of it.
+    messages: &[Message],
+    instructions: Option<&str>,
+    api_key: Option<&str>) -> Result<reqwest::Request, String>{ // successful results is reqwest returning request headers
+        
+        match &self.token_provider {
+            Some(provider) => {
+                let bearer_token = provider().await?;
+                self.build_http_request(messages, instructions, api_key, Some(bearer_token.as_str()))
+            }
+            None =>{
+             
+               self.build_http_request(messages, instructions, api_key, None)
+            }
+
+
+
+        }
     }
 }
 /*You can add a descriptive variant to your AzureOpenAIRequestError enum for that case. Then rerun the test. The existing test only checks unannotated text, so we’ll need a separate test for the rejection afterward.*/

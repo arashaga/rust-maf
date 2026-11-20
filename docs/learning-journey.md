@@ -7,25 +7,29 @@ computer can continue without access to earlier chats.
 ## Resume here
 
 - Last completed section: **5.5, offline prepared Azure request construction**,
-  completed 17 November 2026. The 42 request/response tests and full project
-  suite (138 tests) pass. Existing compiler warnings remain. The full worktree
-  whitespace check passes.
-- **Resume at 5.6.1:** add the stored async token-provider hook. Python accepts
-  a callable returning a token string or awaitable token, and prefers the
-  provider over an API key. This Rust subset deliberately supports async
-  providers only. The learner selected storing a callback on the client/config.
-  Start with one offline test proving the provider supplies the bearer token
-  when both it and an API key are configured. Do not send a request or write
-  production code for the learner. The learner
-  selected direct HTTP with `reqwest` instead of an
-  OpenAI-compatible SDK on 16 November 2026, and chose to support both API-key
-  and Entra ID authentication. Use an injected async token-provider hook for
-  Entra; when both sources are configured, the token provider takes precedence,
-  matching the Python reference. The offline reqwest request builder is
-  implemented and tested; the async token-provider hook is the next section.
-  No live call has been made. Earlier exercises and the
-  class/data map are recorded below
-  and in `docs/rust-maf-map.md`.
+  completed 17 November 2026. At that checkpoint, all 42 request/response tests
+  and the full project suite (138 tests) passed. Existing compiler warnings
+  remain.
+- **5.6.1 verified (18 November 2026):** the learner removed `.ok()` from
+  the provider branch, preserving the builder's `Result` and fixing E0308.
+  `cargo test --locked --offline --test azure_openai_request` passes all 43
+  tests, including `http_request_prefers_stored_token_provider_over_api_key`.
+  The setter stores a boxed closure without calling it. The async wrapper
+  borrows and awaits the provider with `?`, then delegates with a borrowed
+  bearer token. No HTTP request is sent.
+- **Resume at 5.6.2:** give the learner one test,
+  `http_request_does_not_fall_back_when_provider_fails`, with a callback that
+  yields `Err("test token provider failed")`, a valid message, and a dummy
+  API key. Expect the original error, not a prepared API-key request.
+  Keep the test offline; do not edit production code or tests for the learner.
+- The learner selected direct HTTP with `reqwest` instead of an
+  OpenAI-compatible SDK on 16 November 2026, and chose API-key and Entra ID
+  authentication. Python defines `AzureTokenProvider` as a `Callable` type
+  alias, not a trait; the chosen Rust subset stores an async callback. The local
+  book now explains this choice, the trait alternative, and the upcoming Rust
+  syntax and type-storage concepts. No live call has been made. Earlier
+  exercises and the class/data map are recorded below and in
+  `docs/rust-maf-map.md`.
 - **5.5.1 verified (17 November 2026):** the learner added reqwest with
   its JSON feature and pasted
   `http_request_prefers_bearer_token_when_api_key_is_also_available` in
@@ -104,10 +108,13 @@ computer can continue without access to earlier chats.
   138 tests. No request is sent.
 - The local book contains dedicated F.13 subsections on `.ok()`, `.ok_or()` /
   `.ok_or_else()`, `.unwrap()` / `.expect()`, fallback methods, `?`, `.map()` /
-  `.map_err()` / `.and_then()`, and branch-inspection methods. It now records
-  5.5.5-5.5.9 and the planned 5.6.1 token-provider test. The PDF was rebuilt
-  and validated at 140 pages, 97 bookmarks, and 201 links. The book files are
-  ignored/local; this tracked journey remains the portable resume record.
+  `.map_err()` / `.and_then()`, and branch-inspection methods. It records
+  5.5.5-5.5.9 and the 5.6 callback-versus-trait explanation. The new F.14
+  lesson teaches closures, futures, `Box`, `dyn`, `Pin`, and thread and
+  lifetime bounds before applying them in 5.6. Section 5.6.1 records the
+  E0573 and E0308 diagnostics and the verified borrowed-token handoff.
+  The book files are ignored/local; this tracked journey remains the
+  portable resume record.
 - **Chapter 4 status:** complete for the initial Rust subset, not full Python
   content, metadata, or JSON parity. No changes have been staged, committed,
   or pushed by the coach.

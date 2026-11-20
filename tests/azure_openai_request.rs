@@ -1295,3 +1295,68 @@ fn http_request_rejects_invalid_api_key_header_value() {
         "expected a request-build error, got: {error}"
     );
 }
+
+#[tokio::test]
+async fn http_request_prefers_stored_token_provider_over_api_key() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted")
+    .with_token_provider(|| async {
+        Ok::<String, String>("test-bearer-token".to_string())
+    });
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let request = config
+        .build_http_request_with_token_provider(
+            &messages,
+            None,
+            Some("test-api-key"),
+        )
+        .await
+        .expect("the stored token provider should build an authenticated request");
+
+    assert_eq!(
+        request
+            .headers()
+            .get("authorization")
+            .and_then(|value| value.to_str().ok()),
+        Some("Bearer test-bearer-token")
+    );
+    assert!(request.headers().get("api-key").is_none());
+}
+
+#[tokio::test]
+async fn http_request_does_not_fall_back_when_provider_fails() {
+    let config = AzureOpenAIConfig::new(
+        "https://example.openai.azure.com".to_string(),
+        "learning-deployment".to_string(),
+    )
+    .expect("valid configuration should be accepted")
+    .with_token_provider(|| async {
+        Err::<String, String>("test token provider failed".to_string())
+    });
+
+    let messages = vec![Message::new(
+        "user".to_string(),
+        vec!["Hello".to_string()],
+        None,
+        None,
+    )];
+
+    let result = config
+        .build_http_request_with_token_provider(&messages, None, Some("test-api-key"))
+        .await;
+
+    match result {
+        Err(error) => assert_eq!(error, "test token provider failed"),
+        Ok(_) => panic!("a failed token provider must not fall back to the API key"),
+    }
+}
